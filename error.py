@@ -1,0 +1,2 @@
+class ThumperError(Exception):
+	pass
