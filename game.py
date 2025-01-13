@@ -14,9 +14,9 @@ class ThumperGame:
 		self.current_player_index = 0
 		self.current_player = self.players[self.current_player_index]
 		self.spice_silo = 1
+		self.game_ended = False
 		self._reset_available_actions()
 		self._set_conflict_rewards()
-		self.game_ended = False
 
 	def construct_palace(self):
 		self._check_game_ended()

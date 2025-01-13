@@ -1,6 +1,5 @@
 import random
 from constants import *
-from error import ThumperError
 
 class ThumperPlayer:
 	def __init__(self):
