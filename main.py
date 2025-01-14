@@ -1,4 +1,7 @@
-from console import ThumperConsole
+import sys
+from PyQt6.QtWidgets import QApplication
+from qt import ThumperQt
 
-console = ThumperConsole()
-console.render_state()
+app = QApplication(sys.argv)
+ThumperQt()
+sys.exit(app.exec())
