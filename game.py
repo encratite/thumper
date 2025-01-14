@@ -22,7 +22,7 @@ class ThumperGame:
 		self._check_game_ended()
 		if self.current_player.palace:
 			raise ThumperError("Player has already constructed their palace")
-		self._perform_action(ActionType.ECONOMIC, Action.CONSTRUCT_PALACE, spice=6)
+		self._perform_action(ActionType.ECONOMIC, Action.CONSTRUCT_PALACE, spice=Cost.CONSTRUCT_PALACE)
 		self.current_player.palace = True
 		self._next_turn()
 
@@ -47,7 +47,7 @@ class ThumperGame:
 
 	def sell_melange(self):
 		self._check_game_ended()
-		self._perform_action(ActionType.ECONOMIC, Action.SELL_MELANGE, spice=3)
+		self._perform_action(ActionType.ECONOMIC, Action.SELL_MELANGE, spice=Cost.SELL_MELANGE)
 		self.current_player.solari += 8
 		self._next_turn()
 
@@ -66,7 +66,7 @@ class ThumperGame:
 		target_player = self.players[target_index]
 		if target_player.troops_garrison == 0:
 			raise ThumperError("Stone Burner can only be used against players that have troops in their garrison")
-		self._perform_action(ActionType.MILITARY, Action.STONE_BURNER, spice=4)
+		self._perform_action(ActionType.MILITARY, Action.STONE_BURNER, spice=Cost.STONE_BURNER)
 		target_player.troops_garrison = max(target_player.troops_garrison, 0)
 		self.current_player.influence -= 1
 		self._next_turn()
@@ -76,7 +76,7 @@ class ThumperGame:
 		troops_produced = 2
 		deployment_limit = 3
 		self._check_troops(troops_produced, troops_deployed, deployment_limit)
-		self._perform_action(ActionType.MILITARY, Action.HIRE_MERCENARIES, solari=2)
+		self._perform_action(ActionType.MILITARY, Action.HIRE_MERCENARIES, solari=Cost.HIRE_MERCENARIES)
 		self._produce_and_deploy_troops(troops_produced, troops_deployed)
 		self._next_turn()
 
@@ -107,23 +107,23 @@ class ThumperGame:
 
 	def recruit_agent(self):
 		self._check_game_ended()
-		if self.current_player.third_agent:
+		if self.current_player.swordmaster:
 			raise ThumperError("Player already recruited their third agent")
-		self._perform_action(ActionType.POLITICAL, Action.RECRUIT_AGENT)
-		self.current_player.third_agent = True
+		self._perform_action(ActionType.POLITICAL, Action.SWORDMASTER)
+		self.current_player.swordmaster = True
 		self.current_player.agents_left += 1
 		self._next_turn()
 
 	def sardaukar(self):
 		self._check_game_ended()
-		self._perform_action(ActionType.POLITICAL, Action.SARDAUKAR, spice=4)
+		self._perform_action(ActionType.POLITICAL, Action.SARDAUKAR, spice=Cost.SARDAUKAR)
 		self.current_player.influence += 1
 		self.current_player.troops_garrison += 3
 		self._next_turn()
 
 	def audience_with_emperor(self):
 		self._check_game_ended()
-		self._perform_action(ActionType.POLITICAL, Action.AUDIENCE_WITH_EMPEROR, spice=3)
+		self._perform_action(ActionType.POLITICAL, Action.AUDIENCE_WITH_EMPEROR, spice=Cost.AUDIENCE_WITH_EMPEROR)
 		self.current_player.influence += 2
 		self._next_turn()
 
@@ -133,7 +133,7 @@ class ThumperGame:
 		deployment_limit = 5
 		self._check_garrison()
 		self._check_troops(troops_produced, troops_deployed, deployment_limit)
-		self._perform_action(ActionType.POLITICAL, Action.MOBILIZATION, solari=2)
+		self._perform_action(ActionType.POLITICAL, Action.MOBILIZATION, solari=Cost.MOBILIZATION)
 		self._deploy_troops(troops_deployed)
 		self._next_turn()
 

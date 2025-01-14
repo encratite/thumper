@@ -8,7 +8,7 @@ class ThumperPlayer:
 		self.troops_garrison = INITIAL_TROOPS
 		self.troops_deployed = 0
 		self.influence = 0
-		self.third_agent = False
+		self.swordmaster = False
 		self.palace = False
 		self.agents_left = INITIAL_AGENTS
 		self.victory_points = 0
@@ -20,7 +20,7 @@ class ThumperPlayer:
 			ActionType.MILITARY,
 			ActionType.POLITICAL
 		]
-		self.agents_left = 3 if self.third_agent else 2
+		self.agents_left = 3 if self.swordmaster else 2
 		self.troops_deployed = 0
 		self.actions = random.choices(actions, k=4)
 
