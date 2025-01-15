@@ -105,7 +105,15 @@ class ThumperGame:
 		self._deploy_troops(troops_deployed)
 		self._next_turn()
 
-	def recruit_agent(self):
+	def loot_villages(self):
+		self._check_game_ended()
+		if self.current_player.troops_garrison < 1:
+			raise ThumperError("Not enough troops in garrison to loot villages")
+		self.current_player.solari += 4
+		self.current_player.influence -= 1
+		self._next_turn()
+
+	def swordmaster(self):
 		self._check_game_ended()
 		if self.current_player.swordmaster:
 			raise ThumperError("Player already recruited their third agent")

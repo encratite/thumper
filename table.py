@@ -1,6 +1,19 @@
-from PyQt6.QtCore import (Qt, QAbstractTableModel)
+from PyQt6.QtCore import (Qt, QSize, QModelIndex, QAbstractTableModel)
+from PyQt6.QtWidgets import QTableView
 from PyQt6.QtGui import QFont
 from constants import *
+
+class ExpandingTableView(QTableView):
+	def sizeHint(self):
+		model = self.model()
+		index = QModelIndex()
+		column_count = model.columnCount(index)
+		column_width = sum(self.columnWidth(i) for i in range(column_count))
+		width = self.verticalHeader().width() + column_width
+		row_count = model.rowCount(index)
+		row_width = sum(self.rowHeight(i) for i in range(row_count))
+		height = self.horizontalHeader().height() + row_width
+		return QSize(width, height)
 
 class PlayerTableModel(QAbstractTableModel):
 	def __init__(self, game):
