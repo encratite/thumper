@@ -22,7 +22,7 @@ class ThumperPlayer:
 		]
 		self.agents_left = 3 if self.swordmaster else 2
 		self.troops_deployed = 0
-		self.actions = random.choices(actions, k=4)
+		self.actions = random.choices(actions, k=ACTION_TYPES)
 
 	def apply_reward(self, reward):
 		self.victory_points += reward.victory_points

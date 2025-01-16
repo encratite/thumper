@@ -13,7 +13,7 @@ class ThumperGame:
 		# The player whose current turn it is, as an index into players
 		self.current_player_index = 0
 		self.current_player = self.players[self.current_player_index]
-		self.spice_silo = 1
+		self.spice_in_silo = 1
 		self.game_ended = False
 		self._reset_available_actions()
 		self._set_conflict_rewards()
@@ -42,7 +42,7 @@ class ThumperGame:
 	def spice_silo(self):
 		self._check_game_ended()
 		self._perform_action(ActionType.ECONOMIC, Action.SPICE_SILO)
-		self.current_player.spice += self.spice_silo
+		self.current_player.spice += self.spice_in_silo
 		self._next_turn()
 
 	def sell_melange(self):
@@ -67,7 +67,7 @@ class ThumperGame:
 		if target_player.troops_garrison == 0:
 			raise ThumperError("Stone Burner can only be used against players that have troops in their garrison")
 		self._perform_action(ActionType.MILITARY, Action.STONE_BURNER, spice=Cost.STONE_BURNER)
-		target_player.troops_garrison = max(target_player.troops_garrison, 0)
+		target_player.troops_garrison = max(target_player.troops_garrison - 3, 0)
 		self.current_player.influence -= 1
 		self._next_turn()
 
@@ -109,6 +109,7 @@ class ThumperGame:
 		self._check_game_ended()
 		if self.current_player.troops_garrison < 1:
 			raise ThumperError("Not enough troops in garrison to loot villages")
+		self._perform_action(ActionType.MILITARY, Action.LOOT_VILLAGES)
 		self.current_player.solari += 4
 		self.current_player.influence -= 1
 		self._next_turn()
@@ -151,17 +152,18 @@ class ThumperGame:
 		self.current_player.influence += 1
 		self._next_turn()
 
-	# action_index is the 1-based index into the player's remaining actions
-	# action_type is the desired action to change it to
-	def political_maneuvering(self, action_index, action_type):
+	# action_type is the desired action type to add
+	def political_maneuvering(self, action_type):
 		self._check_game_ended()
 		actions = self.current_player.actions
-		if action_index < 1 or action_index > len(actions):
-			raise ThumperError("Invalid action index")
-		if type(action_type) is not Action:
+		if type(action_type) is not ActionType:
 			raise ThumperError("Action type is not an action type enum")
 		self._perform_action(ActionType.POLITICAL, Action.POLITICAL_MANEUVERING)
-		actions[action_index - 1] = action_type
+		actions.append(action_type)
+		self._next_turn()
+
+	def pass_turn(self):
+		self._check_game_ended()
 		self._next_turn()
 
 	def _reset_available_actions(self):
@@ -227,9 +229,9 @@ class ThumperGame:
 			self.current_player_index = self.first_player_index
 			self.current_player = self.players[self.current_player_index]
 			if Action.SPICE_SILO in self.available_actions:
-				self.spice_silo = min(self.spice_silo + 1, MAX_SPICE_SILO)
+				self.spice_in_silo = min(self.spice_in_silo + 1, MAX_SPICE_SILO)
 			else:
-				self.spice_silo = 1
+				self.spice_in_silo = 1
 			self._reset_available_actions()
 			for player in self.players:
 				player.reset()
