@@ -41,35 +41,39 @@ class ThumperQt(QWidget):
 		
 	def _update_labels_top(self):
 		self.current_player_label.setText(f"Current player: Player {self.game.current_player_index + 1}")
-		self.current_round_label.setText(f"Round {self.game.round}")
+		if self.game.game_ended:
+			round_label = "Game ended"
+		else:
+			round_label = f"Round {self.game.round}"
+		self.current_round_label.setText(round_label)
 		action_enums = map(lambda action: action.name.lower(), self.game.current_player.actions)
 		action_string = ", ".join(action_enums)
 		self.actions_label.setText(f"Available actions: {action_string}")
 
 	def _add_buttons(self):
 		self._add_button_label("Economy:")
-		self._add_button("Construct Palace", ActionType.ECONOMIC, Action.CONSTRUCT_PALACE, self._construct_palace, solari=Cost.CONSTRUCT_PALACE, enabled=self._enable_construct_palace)
+		self._add_button("Construct Palace", ActionType.ECONOMIC, Action.CONSTRUCT_PALACE, self._construct_palace, solari=Cost.CONSTRUCT_PALACE, enabled=self.game.construct_palace_enabled)
 		self._add_button("Harvester", ActionType.ECONOMIC, Action.HARVESTER, self._harvester)
 		self._add_button("Refinery", ActionType.ECONOMIC, Action.REFINERY, self._refinery)
-		self._add_button("Spice Silo", ActionType.ECONOMIC, Action.SPICE_SILO, self._spice_silo)
+		self._add_button("Spice Silo", ActionType.ECONOMIC, Action.SPICE_SILO, self._spice_silo, on_update=self._update_spice_silo_button)
 		self._add_button("Sell Melange", ActionType.ECONOMIC, Action.SELL_MELANGE, self._sell_melange, spice=Cost.SELL_MELANGE)
 		self._add_button("Secure Contract", ActionType.ECONOMIC, Action.SECURE_CONTRACT, self._secure_contract)
 		self._new_button_column()
 
 		self._add_button_label("Military:")
-		self._add_button("Stone Burner", ActionType.MILITARY, Action.STONE_BURNER, self._stone_burner, spice=Cost.STONE_BURNER, enabled=self._stone_burner_enabled)
+		self._add_button("Stone Burner", ActionType.MILITARY, Action.STONE_BURNER, self._stone_burner, spice=Cost.STONE_BURNER, enabled=self.game.stone_burner_enabled)
 		self._add_button("Hire Mercenaries", ActionType.MILITARY, Action.HIRE_MERCENARIES, self._hire_mercenaries, solari=Cost.HIRE_MERCENARIES)
 		self._add_button("Quick Strike", ActionType.MILITARY, Action.QUICK_STRIKE, self._quick_strike)
 		self._add_button("Recruitment Center", ActionType.MILITARY, Action.RECRUITMENT_CENTER, self._recruitment_center)
-		self._add_button("Troop Transports", ActionType.MILITARY, Action.TROOP_TRANSPORTS, self._troop_transports, enabled=self._has_garrison)
-		self._add_button("Loot Villages", ActionType.MILITARY, Action.LOOT_VILLAGES, self._loot_villages, enabled=self._has_garrison)
+		self._add_button("Troop Transports", ActionType.MILITARY, Action.TROOP_TRANSPORTS, self._troop_transports, enabled=self.game.has_garrison)
+		self._add_button("Loot Villages", ActionType.MILITARY, Action.LOOT_VILLAGES, self._loot_villages, enabled=self.game.has_garrison)
 		self._new_button_column()
 
 		self._add_button_label("Politics:")
-		self._add_button("Swordmaster", ActionType.POLITICAL, Action.SWORDMASTER, self._swordmaster, solari=Cost.SWORDMASTER, enabled=self._swordmaster_enabled)
+		self._add_button("Swordmaster", ActionType.POLITICAL, Action.SWORDMASTER, self._swordmaster, solari=Cost.SWORDMASTER, enabled=self.game.swordmaster_enabled)
 		self._add_button("Sardaukar", ActionType.POLITICAL, Action.SARDAUKAR, self._sardaukar, spice=Cost.SARDAUKAR)
 		self._add_button("Audience with Emperor", ActionType.POLITICAL, Action.AUDIENCE_WITH_EMPEROR, self._audience_with_emperor, spice=Cost.AUDIENCE_WITH_EMPEROR)
-		self._add_button("Mobilization", ActionType.POLITICAL, Action.MOBILIZATION, self._mobilization, solari=Cost.MOBILIZATION, enabled=self._has_garrison)
+		self._add_button("Mobilization", ActionType.POLITICAL, Action.MOBILIZATION, self._mobilization, solari=Cost.MOBILIZATION, enabled=self.game.has_garrison)
 		self._add_button("Seek Allies", ActionType.POLITICAL, Action.SEEK_ALLIES, self._seek_allies)
 		self._add_button("Political Maneuvering", ActionType.POLITICAL, Action.POLITICAL_MANEUVERING, self._political_maneuvering)
 
@@ -97,9 +101,9 @@ class ThumperQt(QWidget):
 		self.grid.addWidget(label, self.button_row, self.button_column, alignment=Qt.AlignmentFlag.AlignCenter)
 		self.button_row += 1
 
-	def _add_button(self, text, action_type, action_enum, on_click, spice=0, solari=0, enabled=None):
+	def _add_button(self, text, action_type, action_enum, on_click, spice=0, solari=0, enabled=None, on_update=None):
 		handler = partial(self._interface_update_wrapper, on_click)
-		button = ActionButton(text, action_type, action_enum, handler, spice, solari, enabled)
+		button = ActionButton(text, action_type, action_enum, handler, spice, solari, enabled, on_update)
 		self.grid.addWidget(button.button, self.button_row, self.button_column)
 		self.button_row += 1
 		self.buttons.append(button)
@@ -119,18 +123,6 @@ class ThumperQt(QWidget):
 		self._update_labels_top()
 		self._update_buttons()
 		self.table_model.endResetModel()
-
-	def _enable_construct_palace(self):
-		return not self.game.current_player.palace
-
-	def _stone_burner_enabled(self):
-		return any(player is not self.game.current_player and player.troops_garrison > 0 for player in self.game.players)
-
-	def _has_garrison(self):
-		return self.game.current_player.troops_garrison > 0
-
-	def _swordmaster_enabled(self):
-		return not self.game.current_player.swordmaster
 
 	def _construct_palace(self):
 		self.game.construct_palace()
@@ -241,8 +233,11 @@ class ThumperQt(QWidget):
 		message_box.setText(text)
 		message_box.exec()
 
+	def _update_spice_silo_button(self, button, game):
+		button.setText(f"Spice Silo [{game.spice_in_silo}]")
+
 class ActionButton:
-	def __init__(self, text, action_type, action_enum, on_click, spice, solari, enabled):
+	def __init__(self, text, action_type, action_enum, on_click, spice, solari, enabled, on_update):
 		self.button = QPushButton(text)
 		self.button.clicked.connect(on_click)
 		self.action_type = action_type
@@ -250,13 +245,19 @@ class ActionButton:
 		self.spice = spice
 		self.solari = solari
 		self.enabled = enabled
+		self.on_update = on_update
 
 	def update(self, game):
 		player = game.current_player
 		enabled = not game.game_ended
-		enabled = enabled and self.action_enum in game.available_actions
+		available = self.action_enum in game.available_actions
+		enabled = enabled and available
 		enabled = enabled and self.action_type in player.actions
 		enabled = enabled and player.spice >= self.spice
 		enabled = enabled and player.solari >= self.solari
 		enabled = enabled and (self.enabled is None or self.enabled())
 		self.button.setEnabled(enabled)
+		style = "" if available else "color: #d00000"
+		self.button.setStyleSheet(style)
+		if self.on_update != None:
+			self.on_update(self.button, game)

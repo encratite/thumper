@@ -22,7 +22,7 @@ class ThumperGame:
 		self._check_game_ended()
 		if self.current_player.palace:
 			raise ThumperError("Player has already constructed their palace")
-		self._perform_action(ActionType.ECONOMIC, Action.CONSTRUCT_PALACE, spice=Cost.CONSTRUCT_PALACE)
+		self._perform_action(ActionType.ECONOMIC, Action.CONSTRUCT_PALACE, solari=Cost.CONSTRUCT_PALACE)
 		self.current_player.palace = True
 		self._next_turn()
 
@@ -73,20 +73,16 @@ class ThumperGame:
 
 	def hire_mercenaries(self, troops_deployed):
 		self._check_game_ended()
-		troops_produced = 2
-		deployment_limit = 3
-		self._check_troops(troops_produced, troops_deployed, deployment_limit)
+		self._check_troops(HIRE_MERCENARIES_TROOPS_PRODUCED, troops_deployed, HIRE_MERCENARIES_DEPLOYMENT_LIMIT)
 		self._perform_action(ActionType.MILITARY, Action.HIRE_MERCENARIES, solari=Cost.HIRE_MERCENARIES)
-		self._produce_and_deploy_troops(troops_produced, troops_deployed)
+		self._produce_and_deploy_troops(HIRE_MERCENARIES_TROOPS_PRODUCED, troops_deployed)
 		self._next_turn()
 
 	def quick_strike(self, troops_deployed):
 		self._check_game_ended()
-		troops_produced = 1
-		deployment_limit = 2
-		self._check_troops(troops_produced, troops_deployed, deployment_limit)
+		self._check_troops(QUICK_STRIKE_TROOPS_PRODUCED, troops_deployed, QUICK_STRIKE_DEPLOYMENT_LIMIT)
 		self._perform_action(ActionType.MILITARY, Action.QUICK_STRIKE)
-		self._produce_and_deploy_troops(troops_produced, troops_deployed)
+		self._produce_and_deploy_troops(QUICK_STRIKE_TROOPS_PRODUCED, troops_deployed)
 		self._next_turn()
 
 	def recruitment_center(self):
@@ -97,10 +93,8 @@ class ThumperGame:
 
 	def troop_transports(self, troops_deployed):
 		self._check_game_ended()
-		troops_produced = 0
-		deployment_limit = 4
 		self._check_garrison()
-		self._check_troops(troops_produced, troops_deployed, deployment_limit)
+		self._check_troops(TROOP_TRANSPORTS_TROOPS_PRODUCED, troops_deployed, TROOP_TRANSPORTS_DEPLOYMENT_LIMIT)
 		self._perform_action(ActionType.MILITARY, Action.TROOP_TRANSPORTS)
 		self._deploy_troops(troops_deployed)
 		self._next_turn()
@@ -138,10 +132,8 @@ class ThumperGame:
 
 	def mobilization(self, troops_deployed):
 		self._check_game_ended()
-		troops_produced = 0
-		deployment_limit = 5
 		self._check_garrison()
-		self._check_troops(troops_produced, troops_deployed, deployment_limit)
+		self._check_troops(MOBILIZATION_TROOPS_PRODUCED, troops_deployed, MOBILIZATION_DEPLOYMENT_LIMIT)
 		self._perform_action(ActionType.POLITICAL, Action.MOBILIZATION, solari=Cost.MOBILIZATION)
 		self._deploy_troops(troops_deployed)
 		self._next_turn()
@@ -159,6 +151,7 @@ class ThumperGame:
 		if type(action_type) is not ActionType:
 			raise ThumperError("Action type is not an action type enum")
 		self._perform_action(ActionType.POLITICAL, Action.POLITICAL_MANEUVERING)
+		self.current_player.solari += 1
 		actions.append(action_type)
 		self._next_turn()
 
@@ -166,7 +159,19 @@ class ThumperGame:
 		self._check_game_ended()
 		self._next_turn()
 
-	def _reset_available_actions(self):
+	def construct_palace_enabled(self):
+		return not self.current_player.palace
+
+	def stone_burner_enabled(self):
+		return any(player is not self.current_player and player.troops_garrison > 0 for player in self.players)
+
+	def has_garrison(self):
+		return self.current_player.troops_garrison > 0
+
+	def swordmaster_enabled(self):
+		return not self.current_player.swordmaster
+
+	def reset_available_actions(self):
 		self.available_actions = list(Action)
 
 	def _perform_action(self, action_type, action, spice=0, solari=0):
@@ -220,6 +225,7 @@ class ThumperGame:
 				# There is still a player who has an agent left
 				self.current_player = player
 				self.current_player_index = player_index
+				self._update_victory_points()
 				return
 		# There are no players with any agents left, resolve the conflict
 		self._resolve_conflict()
@@ -237,6 +243,7 @@ class ThumperGame:
 				player.reset()
 		else:
 			self.game_ended = True
+		self._update_victory_points()
 
 	def _resolve_conflict(self):
 		conflict_rewards = self.conflict_rewards[self.round - 1]
@@ -320,3 +327,29 @@ class ThumperGame:
 			ConflictReward(0, 0, 3, 0)
 		])
 		self.conflict_rewards = rewards
+
+	def _update_victory_points(self):
+		for player in self.players:
+			victory_points = player.conflict_victory_points
+			if player.influence >= 2:
+				victory_points += 1
+			if player.influence >= 4:
+				victory_points += 1
+			if player.palace:
+				victory_points += 1
+			player.victory_points = victory_points
+		if self.game_ended:
+			self._add_influence_victory_points()
+
+	def _add_influence_victory_points(self):
+		players = sorted(self.players, key=lambda p: p.influence, reverse=True)
+		player1 = players[0]
+		player2 = players[1]
+		player3 = players[2]
+		if player1.influence > player2.influence:
+			player1.victory_points += 2
+			if player2.influence > player3.influence:
+				player2.victory_points += 1
+		else:
+			player1.victory_points += 1
+			player2.victory_points += 1

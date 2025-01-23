@@ -12,6 +12,7 @@ class ThumperPlayer:
 		self.palace = False
 		self.agents_left = INITIAL_AGENTS
 		self.victory_points = 0
+		self.conflict_victory_points = 0
 		self.reset()
 
 	def reset(self):
@@ -22,10 +23,13 @@ class ThumperPlayer:
 		]
 		self.agents_left = 3 if self.swordmaster else 2
 		self.troops_deployed = 0
-		self.actions = random.choices(actions, k=ACTION_TYPES)
+		action_type_count = ACTION_TYPES
+		if self.swordmaster:
+			action_type_count += 1
+		self.actions = random.choices(actions, k=action_type_count)
 
 	def apply_reward(self, reward):
-		self.victory_points += reward.victory_points
+		self.conflict_victory_points += reward.victory_points
 		self.influence += reward.influence
 		self.spice = reward.spice
 		self.solari = reward.solari
