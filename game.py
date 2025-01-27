@@ -5,6 +5,17 @@ from conflict import ConflictReward
 
 class ThumperGame:
 	def __init__(self):
+		# Add placeholders to make PyCharm stop whining about prop
+		self.players = None
+		self.round = None
+		self.first_player_index = None
+		self.current_player_index = None
+		self.current_player = None
+		self.spice_in_silo = None
+		self.game_ended = None
+		self.reset()
+
+	def reset(self):
 		self.players = [ThumperPlayer() for _ in range(PLAYER_COUNT)]
 		# The current round (1 - 10)
 		self.round = 1
@@ -171,7 +182,7 @@ class ThumperGame:
 	def swordmaster_enabled(self):
 		return not self.current_player.swordmaster
 
-	def reset_available_actions(self):
+	def _reset_available_actions(self):
 		self.available_actions = list(Action)
 
 	def _perform_action(self, action_type, action, spice=0, solari=0):

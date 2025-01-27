@@ -22,7 +22,7 @@ class ThumperEnvironment(gym.Env):
 	def __init__(self, position, models=None):
 		self.position = position
 		self.models = models
-		self.game = None
+		self.game = ThumperGame()
 		# Current round (1 to 8), one-hot encoded, so 0 to 1 each
 		nvec = MAX_ROUNDS * [2]
 		for i in range(PLAYER_COUNT):
@@ -53,8 +53,9 @@ class ThumperEnvironment(gym.Env):
 		self.observation_space = gym.spaces.MultiDiscrete(nvec)
 		self._initialize_actions()
 
-	def reset(self):
-		self.game = ThumperGame()
+	def reset(self, seed=None, options=None):
+		super().reset(seed=seed)
+		self.game.reset()
 		# The game must be reset to a state in which it is the target player's turn
 		self._perform_enemy_moves()
 		assert self.game.round == 1
@@ -63,6 +64,7 @@ class ThumperEnvironment(gym.Env):
 		return observation, info
 
 	def step(self, action):
+		print(f"Step: {action}")
 		assert not self.game.game_ended
 		assert 0 <= action < len(self.actions)
 		environment_action = self.actions[action]
@@ -192,7 +194,20 @@ class ThumperEnvironment(gym.Env):
 			EnvironmentAction(
 				self.game.political_maneuvering,
 				ActionType.POLITICAL,
-				Action.POLITICAL_MANEUVERING
+				Action.POLITICAL_MANEUVERING,
+				argument=ActionType.ECONOMIC
+			),
+			EnvironmentAction(
+				self.game.political_maneuvering,
+				ActionType.POLITICAL,
+				Action.POLITICAL_MANEUVERING,
+				argument=ActionType.MILITARY
+			),
+			EnvironmentAction(
+				self.game.political_maneuvering,
+				ActionType.POLITICAL,
+				Action.POLITICAL_MANEUVERING,
+				argument=ActionType.POLITICAL
 			),
 			EnvironmentAction(
 				self.game.pass_turn,
@@ -230,7 +245,7 @@ class ThumperEnvironment(gym.Env):
 			# For negative influence
 			resource_min = -5
 			resource_max = 10
-			max(min(x, resource_max), resource_min)
+			return max(min(x, resource_max), resource_min)
 
 		swordmaster = self._from_bool(player.swordmaster)
 		palace = self._from_bool(player.palace)
@@ -276,7 +291,7 @@ class ThumperEnvironment(gym.Env):
 			# Filter out actions that are currently impossible due to blocking, lack of resources, etc.
 			enabled_actions = filter(lambda x: x[0].enabled(self.game), actions)
 			best_action = max(enabled_actions, key=lambda x: x[1])
-
+			best_action.perform(self.game)
 		else:
 			# No other DQN agents are available yet, perform a random action
 			available_actions = [action for action in self.actions if action.enabled(self.game)]
@@ -284,24 +299,25 @@ class ThumperEnvironment(gym.Env):
 			random_action.perform(self.game)
 
 	def _perform_enemy_moves(self):
+		# print("_perform_enemy_moves")
+		count = 0
 		while not self.game.game_ended and self.game.current_player_index != self.position:
 			self._perform_enemy_move()
+			count += 1
+		# print(f"Moves performed: {count}")
 
 	def _get_victory_points(self):
 		return self.game.players[self.position].victory_points
 
 	def _get_info(self):
-		action_mask = [action.enabled(self.game) for action in self.actions]
-		info = {
-			"action_mask": action_mask
-		}
+		info = {}
 		return info
 
 class EnvironmentAction:
-	def __init__(self, action, action_enum, action_type, solari=0, spice=0, garrison=0, enabled=None, argument=None, expand=None, troops_produced=None, deployment_limit=None):
+	def __init__(self, action, action_type, action_enum, solari=0, spice=0, garrison=0, enabled=None, argument=None, expand=None, troops_produced=None, deployment_limit=None):
 		self.action = action
-		self.action_enum = action_enum
 		self.action_type = action_type
+		self.action_enum = action_enum
 		self.solari = solari
 		self.spice = spice
 		self.garrison = garrison
@@ -314,8 +330,8 @@ class EnvironmentAction:
 	def argument_copy(self, argument):
 		return EnvironmentAction(
 			self.action,
-			self.action_enum,
 			self.action_type,
+			self.action_enum,
 			solari=self.solari,
 			spice=self.spice,
 			enabled=self.enabled_check,
@@ -327,17 +343,31 @@ class EnvironmentAction:
 	def enabled(self, game):
 		player = game.current_player
 		enabled = not game.game_ended
+		# print(enabled)
 		enabled = enabled and game.current_player.agents_left > 0
+		# print(enabled)
 		enabled = enabled and (self.action_enum is None or self.action_enum in game.available_actions)
+		# print(enabled)
+		# print(f"self.action_enum: {self.action_enum}")
+		# print(f"game.available_actions: {game.available_actions}")
+		# print(f"self.action_type: {self.action_type}")
+		# print(f"player.actions: {player.actions}")
 		enabled = enabled and (self.action_type is None or self.action_type in player.actions)
+		# print(enabled)
 		enabled = enabled and player.spice >= self.spice
+		# print(enabled)
 		enabled = enabled and player.solari >= self.solari
+		# print(enabled)
 		enabled = enabled and player.troops_garrison >= self.garrison
+		# print(enabled)
 		enabled = enabled and (self.enabled_check is None or self.enabled_check())
+		# print(enabled)
 		enabled = enabled and (self.troops_produced is None or self.deployment_limit is None or self._valid_deployment(game))
+		# print(enabled)
 		return enabled
 
 	def perform(self, game):
+		print(f"Attempting to perform action: {self.action}")
 		assert self.enabled(game)
 		if self.argument is None:
 			self.action()
