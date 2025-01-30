@@ -2,7 +2,7 @@ import random
 from tensordict import TensorDict
 from torchrl.envs.common import EnvBase
 from torch import tensor, uint8, int8
-from torchrl.data import Composite, Categorical, OneHot, Binary
+from torchrl.data import Composite, Categorical, OneHot, Binary, Unbounded
 from game import ThumperGame
 from constants import *
 
@@ -45,7 +45,7 @@ class ThumperEnvironment(EnvBase):
 			players=player_spec.expand(4)
 		)
 		self.full_state_spec = self.full_observation_spec.clone()
-		self.full_reward_spec = Categorical(11, dtype=int8, device=device)
+		self.full_reward_spec = Unbounded(shape=(1,), device=device)
 		self.full_done_spec = Composite(
 			done=Binary(1, device=device),
 			terminated=Binary(1, device=device),
@@ -57,7 +57,7 @@ class ThumperEnvironment(EnvBase):
 		if seed is not None:
 			raise NotImplementedError("This environment does not support seeds")
 
-	def _reset(self, tensor_dict):
+	def _reset(self, tensor_dict, **kwargs):
 		assert tensor_dict is None
 		self.game.reset()
 		# The game must be reset to a state in which it is the target player's turn
@@ -67,6 +67,7 @@ class ThumperEnvironment(EnvBase):
 		return observation
 
 	def _step(self, tensor_dict):
+		action = int(tensor_dict["action"])
 		assert not self.game.game_ended
 		assert 0 <= action < len(self.actions)
 		environment_action = self.actions[action]
@@ -281,16 +282,7 @@ class ThumperEnvironment(EnvBase):
 		assert not self.game.game_ended
 		assert self.game.current_player_index != self.position
 		if self.models is not None:
-			# Select the DQN agent for the current player's position
-			model = self.models[self.game.current_player_index]
-			observation = self._get_observation()
-			q_values = model.predict(observation[np.newaxis])
-			# Create tuples of actions and their corresponding Q-values
-			actions = [(self.actions[i], q_values[i]) for i in range(len(self.actions))]
-			# Filter out actions that are currently impossible due to blocking, lack of resources, etc.
-			enabled_actions = filter(lambda x: x[0].enabled(self.game), actions)
-			best_action = max(enabled_actions, key=lambda x: x[1])
-			best_action.perform(self.game)
+			raise NotImplementedError()
 		else:
 			# No other DQN agents are available yet, perform a random action
 			available_actions = [action for action in self.actions if action.enabled(self.game)]
