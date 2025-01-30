@@ -1,12 +1,12 @@
+from argparse import ArgumentError
 import random
-from tensordict import TensorDict
-from torchrl.envs.common import EnvBase
-from torch import tensor, uint8, int8
-from torchrl.data import Composite, Categorical, OneHot, Binary, Unbounded
+
+import gymnasium as gym
+import numpy as np
 from game import ThumperGame
 from constants import *
 
-class ThumperEnvironment(EnvBase):
+class ThumperEnvironment(gym.Env):
 	"""
 	Creates an OpenAI gym environment for the Thumper proof of concept game.
 	The models are only meant to be trained for a particular position on the table.
@@ -19,55 +19,52 @@ class ThumperEnvironment(EnvBase):
 		position: an int from 0 to PLAYER_COUNT - 1 that determines the player's position on the table
 		models: a list of PLAYER_COUNT DQN agents that represent the AIs that will control the other players
 	"""
-	def __init__(self, position, models=None, device=None):
-		super().__init__(device=device)
+	def __init__(self, position, models=None):
 		self.position = position
 		self.models = models
 		self.game = ThumperGame()
-		player_spec = Composite(
-			device=device,
-			economic_actions=Categorical(5, dtype=uint8, device=device),
-			military_actions=Categorical(5, dtype=uint8, device=device),
-			political_actions=Categorical(5, dtype=uint8, device=device),
-			spice=Categorical(11, dtype=uint8, device=device),
-			solari=Categorical(11, dtype=uint8, device=device),
-			troops_garrison=Categorical(11, dtype=uint8, device=device),
-			troops_deployed=Categorical(11, dtype=uint8, device=device),
-			influence=Categorical(16, dtype=int8, device=device),
-			swordmaster=Binary(1, device=device),
-			palace=Binary(1, device=device),
-			agents_left=Categorical(4, dtype=uint8, device=device),
-			victory_points=Categorical(13, dtype=uint8, device=device),
-		)
-		self.full_observation_spec = Composite(
-			device=device,
-			round=OneHot(8, device=device),
-			players=player_spec.expand(4)
-		)
-		self.full_state_spec = self.full_observation_spec.clone()
-		self.full_reward_spec = Unbounded(shape=(1,), device=device)
-		self.full_done_spec = Composite(
-			done=Binary(1, device=device),
-			terminated=Binary(1, device=device),
-			device=device
-		)
-		self._initialize_actions(device)
+		# Current round (1 to 8), one-hot encoded, so 0 to 1 each
+		nvec = MAX_ROUNDS * [2]
+		for i in range(PLAYER_COUNT):
+			nvec += [
+				# Action type counts (0 - 4)
+				5,
+				5,
+				5,
+				# Solari (0 - 10+)
+				11,
+				# Spice (0 - 10+)
+				11,
+				# Troops in garrison (0 - 10+)
+				11,
+				# Troops deployed (0 - 10+)
+				11,
+				# Influence (-5 or less to 10+)
+				16,
+				# Swordmaster (0 to 1)
+				2,
+				# Palace (0 to 1)
+				2,
+				# Agents left (0 to 3)
+				4,
+				# Victory points (0 to 12)
+				13
+			]
+		self.observation_space = gym.spaces.MultiDiscrete(nvec)
+		self._initialize_actions()
 
-	def _set_seed(self, seed):
-		if seed is not None:
-			raise NotImplementedError("This environment does not support seeds")
-
-	def _reset(self, tensor_dict, **kwargs):
-		assert tensor_dict is None
+	def reset(self, seed=None, options=None):
+		super().reset(seed=seed)
 		self.game.reset()
 		# The game must be reset to a state in which it is the target player's turn
 		self._perform_enemy_moves()
 		assert self.game.round == 1
 		observation = self._get_observation()
-		return observation
+		info = self._get_info()
+		return observation, info
 
-	def _step(self, tensor_dict):
-		action = int(tensor_dict["action"])
+	def step(self, action):
+		print(f"Step: {action}")
 		assert not self.game.game_ended
 		assert 0 <= action < len(self.actions)
 		environment_action = self.actions[action]
@@ -75,14 +72,14 @@ class ThumperEnvironment(EnvBase):
 		environment_action.perform(self.game)
 		self._perform_enemy_moves()
 		victory_points_after = self._get_victory_points()
+		observation = self._get_observation()
 		reward = victory_points_after - victory_points_before
-		output = self._get_observation()
-		output["reward"] = reward
-		output["done"] = self.game.game_ended
-		output["terminated"] = self.game.game_ended
-		return output
+		terminated = self.game.game_ended
+		truncated = False
+		info = self._get_info()
+		return observation, reward, terminated, truncated, info
 
-	def _initialize_actions(self, device):
+	def _initialize_actions(self):
 		actions = [
 			EnvironmentAction(
 				self.game.construct_palace,
@@ -227,17 +224,21 @@ class ThumperEnvironment(EnvBase):
 					self.actions.append(expanded_action)
 			else:
 				self.actions.append(action)
-		total_actions = len(self.actions)
+		# There's one additional pseudo-action for rewards from conflicts and the endgame influence rewards
+		total_actions = len(self.actions) + 1
 		# The action space consists of indexes into self.actions
-		self.full_action_space = Categorical(total_actions, dtype=uint8, device=device)
+		self.action_space = gym.spaces.Discrete(total_actions)
 
 	def _get_observation(self):
-		players = [self._get_player_observation(player) for player in self.game.players]
-		observation = TensorDict({
-			"round": self.game.round,
-			"players": players
-		})
-		return observation
+		# One-hot encoding of the current round
+		observation = []
+		for i in range(MAX_ROUNDS):
+			value = 1 if self.game.round == i + 1 else 0
+			observation.append(value)
+		# Resources, etc., of each player
+		for player in self.game.players:
+			observation += self._get_player_observation(player)
+		return np.array(observation, dtype=np.int8)
 
 	def _get_player_observation(self, player):
 		def adjust(x):
@@ -246,43 +247,51 @@ class ThumperEnvironment(EnvBase):
 			resource_max = 10
 			return max(min(x, resource_max), resource_min)
 
-		action_type_counts = self._count_action_types(player)
 		swordmaster = self._from_bool(player.swordmaster)
 		palace = self._from_bool(player.palace)
-		observation = TensorDict({
-			"economic_actions": action_type_counts[ActionType.ECONOMIC],
-			"military_actions": action_type_counts[ActionType.MILITARY],
-			"political_actions": action_type_counts[ActionType.POLITICAL],
-			"spice": adjust(player.spice),
-			"solari": adjust(player.solari),
-			"troops_garrison": adjust(player.troops_garrison),
-			"troops_deployed": adjust(player.troops_deployed),
-			"influence": adjust(player.influence),
-			"swordmaster": swordmaster,
-			"palace": palace,
-			"agents_left": player.agents_left,
-			"victory_points": player.victory_points
-		})
+		observation = [
+			adjust(player.spice),
+			adjust(player.solari),
+			adjust(player.troops_garrison),
+			adjust(player.troops_deployed),
+			adjust(player.influence),
+			swordmaster,
+			palace,
+			player.agents_left,
+			player.victory_points
+		]
+		observation += self._from_action_types(player)
 		return observation
 
 	def _from_bool(self, value):
 		return 1 if value else 0
 
-	def _count_action_types(self, player):
-		counts = {
-			ActionType.ECONOMIC: 0,
-			ActionType.MILITARY: 0,
-			ActionType.POLITICAL: 0
-		}
+	def _from_action_types(self, player):
+		actions = [
+			ActionType.ECONOMIC,
+			ActionType.MILITARY,
+			ActionType.POLITICAL
+		]
+		observations = len(actions) * [0]
 		for action in player.actions:
-			counts[action] += 1
-		return counts
+			index = actions.index(action)
+			observations[index] += 1
+		return observations
 
 	def _perform_enemy_move(self):
 		assert not self.game.game_ended
 		assert self.game.current_player_index != self.position
 		if self.models is not None:
-			raise NotImplementedError()
+			# Select the DQN agent for the current player's position
+			model = self.models[self.game.current_player_index]
+			observation = self._get_observation()
+			q_values = model.predict(observation[np.newaxis])
+			# Create tuples of actions and their corresponding Q-values
+			actions = [(self.actions[i], q_values[i]) for i in range(len(self.actions))]
+			# Filter out actions that are currently impossible due to blocking, lack of resources, etc.
+			enabled_actions = filter(lambda x: x[0].enabled(self.game), actions)
+			best_action = max(enabled_actions, key=lambda x: x[1])
+			best_action.perform(self.game)
 		else:
 			# No other DQN agents are available yet, perform a random action
 			available_actions = [action for action in self.actions if action.enabled(self.game)]
@@ -290,13 +299,19 @@ class ThumperEnvironment(EnvBase):
 			random_action.perform(self.game)
 
 	def _perform_enemy_moves(self):
+		# print("_perform_enemy_moves")
 		count = 0
 		while not self.game.game_ended and self.game.current_player_index != self.position:
 			self._perform_enemy_move()
 			count += 1
+		# print(f"Moves performed: {count}")
 
 	def _get_victory_points(self):
 		return self.game.players[self.position].victory_points
+
+	def _get_info(self):
+		info = {}
+		return info
 
 class EnvironmentAction:
 	def __init__(self, action, action_type, action_enum, solari=0, spice=0, garrison=0, enabled=None, argument=None, expand=None, troops_produced=None, deployment_limit=None):
