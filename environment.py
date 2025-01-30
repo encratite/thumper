@@ -78,6 +78,10 @@ class ThumperEnvironment(gym.Env):
 		info = self._get_info()
 		return observation, reward, terminated, truncated, info
 
+	def action_masks(self):
+		masks = [action.enabled(self.game) for action in self.actions]
+		return masks
+
 	def _initialize_actions(self):
 		actions = [
 			EnvironmentAction(
@@ -119,7 +123,8 @@ class ThumperEnvironment(gym.Env):
 				Action.STONE_BURNER,
 				spice=Cost.STONE_BURNER,
 				enabled=self.game.stone_burner_enabled,
-				expand=(1, 4)
+				enabled_argument=True,
+				expand=(1, PLAYER_COUNT)
 			),
 			EnvironmentAction(
 				self.game.hire_mercenaries,
@@ -147,6 +152,7 @@ class ThumperEnvironment(gym.Env):
 				self.game.troop_transports,
 				ActionType.MILITARY,
 				Action.TROOP_TRANSPORTS,
+				enabled=self.game.has_garrison,
 				troops_produced=TROOP_TRANSPORTS_TROOPS_PRODUCED,
 				deployment_limit=TROOP_TRANSPORTS_DEPLOYMENT_LIMIT,
 				expand=(0, 4)
@@ -181,6 +187,7 @@ class ThumperEnvironment(gym.Env):
 				ActionType.POLITICAL,
 				Action.MOBILIZATION,
 				solari=Cost.MOBILIZATION,
+				enabled=self.game.has_garrison,
 				troops_produced=MOBILIZATION_TROOPS_PRODUCED,
 				deployment_limit=MOBILIZATION_DEPLOYMENT_LIMIT,
 				expand=(0, 5)
@@ -223,9 +230,8 @@ class ThumperEnvironment(gym.Env):
 					self.actions.append(expanded_action)
 			else:
 				self.actions.append(action)
-		# There's one additional pseudo-action for rewards from conflicts and the endgame influence rewards
-		total_actions = len(self.actions) + 1
 		# The action space consists of indexes into self.actions
+		total_actions = len(self.actions)
 		self.action_space = gym.spaces.Discrete(total_actions)
 
 	def _get_observation(self):
@@ -311,7 +317,7 @@ class ThumperEnvironment(gym.Env):
 		return info
 
 class EnvironmentAction:
-	def __init__(self, action, action_type, action_enum, solari=0, spice=0, garrison=0, enabled=None, argument=None, expand=None, troops_produced=None, deployment_limit=None):
+	def __init__(self, action, action_type, action_enum, solari=0, spice=0, garrison=0, enabled=None, enabled_argument=False, argument=None, expand=None, troops_produced=None, deployment_limit=None):
 		self.action = action
 		self.action_type = action_type
 		self.action_enum = action_enum
@@ -319,6 +325,7 @@ class EnvironmentAction:
 		self.spice = spice
 		self.garrison = garrison
 		self.enabled_check = enabled
+		self.enabled_argument = enabled_argument
 		self.argument = argument
 		self.expand = expand
 		self.troops_produced = troops_produced
@@ -332,6 +339,7 @@ class EnvironmentAction:
 			solari=self.solari,
 			spice=self.spice,
 			enabled=self.enabled_check,
+			enabled_argument=self.enabled_argument,
 			argument=argument,
 			troops_produced=self.troops_produced,
 			deployment_limit=self.deployment_limit
@@ -346,12 +354,14 @@ class EnvironmentAction:
 		enabled = enabled and player.spice >= self.spice
 		enabled = enabled and player.solari >= self.solari
 		enabled = enabled and player.troops_garrison >= self.garrison
-		enabled = enabled and (self.enabled_check is None or self.enabled_check())
+		if self.enabled_argument:
+			enabled = enabled and (self.enabled_check is None or self.enabled_check(self.argument))
+		else:
+			enabled = enabled and (self.enabled_check is None or self.enabled_check())
 		enabled = enabled and (self.troops_produced is None or self.deployment_limit is None or self._valid_deployment(game))
 		return enabled
 
 	def perform(self, game):
-		print(f"Attempting to perform action: {self.action}")
 		assert self.enabled(game)
 		if self.argument is None:
 			self.action()

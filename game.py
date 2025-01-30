@@ -17,7 +17,7 @@ class ThumperGame:
 
 	def reset(self):
 		self.players = [ThumperPlayer() for _ in range(PLAYER_COUNT)]
-		# The current round (1 - 10)
+		# The current round (1 - 8)
 		self.round = 1
 		# The player who was the first player in the current round, as an index into players
 		self.first_player_index = 0
@@ -173,8 +173,9 @@ class ThumperGame:
 	def construct_palace_enabled(self):
 		return not self.current_player.palace
 
-	def stone_burner_enabled(self):
-		return any(player is not self.current_player and player.troops_garrison > 0 for player in self.players)
+	def stone_burner_enabled(self, target):
+		player = self.players[target - 1]
+		return player is not self.current_player and player.troops_garrison > 0
 
 	def has_garrison(self):
 		return self.current_player.troops_garrison > 0
