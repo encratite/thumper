@@ -17,11 +17,11 @@ class ThumperEnvironment(gym.Env):
 
 	Arguments:
 		position: an int from 0 to PLAYER_COUNT - 1 that determines the player's position on the table
-		models: a list of PLAYER_COUNT DQN agents that represent the AIs that will control the other players
+		opponent_models: a list of PLAYER_COUNT DQN agents that represent the AIs that will control the other players
 	"""
-	def __init__(self, position, models=None):
-		self.position = position
-		self.models = models
+	def __init__(self, position, opponent_models=None):
+		self.position_index = position - 1
+		self.opponent_models = opponent_models
 		self.game = ThumperGame()
 		# Current round (1 to 8), one-hot encoded, so 0 to 1 each
 		nvec = MAX_ROUNDS * [2]
@@ -57,7 +57,7 @@ class ThumperEnvironment(gym.Env):
 		super().reset(seed=seed)
 		self.game.reset()
 		# The game must be reset to a state in which it is the target player's turn
-		self._perform_enemy_moves()
+		self._perform_opponent_moves()
 		assert self.game.round == 1
 		observation = self._get_observation()
 		info = self._get_info()
@@ -69,7 +69,7 @@ class ThumperEnvironment(gym.Env):
 		environment_action = self.actions[action]
 		victory_points_before = self._get_victory_points()
 		environment_action.perform(self.game)
-		self._perform_enemy_moves()
+		self._perform_opponent_moves()
 		victory_points_after = self._get_victory_points()
 		observation = self._get_observation()
 		reward = victory_points_after - victory_points_before
@@ -283,34 +283,29 @@ class ThumperEnvironment(gym.Env):
 			observations[index] += 1
 		return observations
 
-	def _perform_enemy_move(self):
+	def _perform_opponent_move(self):
 		assert not self.game.game_ended
-		assert self.game.current_player_index != self.position
-		if self.models is not None:
-			# Select the DQN agent for the current player's position
-			model = self.models[self.game.current_player_index]
+		assert self.game.current_player_index != self.position_index
+		if self.opponent_models is not None:
 			observation = self._get_observation()
-			q_values = model.predict(observation[np.newaxis])
-			# Create tuples of actions and their corresponding Q-values
-			actions = [(self.actions[i], q_values[i]) for i in range(len(self.actions))]
-			# Filter out actions that are currently impossible due to blocking, lack of resources, etc.
-			enabled_actions = filter(lambda x: x[0].enabled(self.game), actions)
-			best_action = max(enabled_actions, key=lambda x: x[1])
-			best_action.perform(self.game)
+			opponent_model = self.opponent_models[self.game.current_player_index]
+			action_masks = self.action_masks()
+			action_index, _info = opponent_model.predict(observation, deterministic=True, action_masks=action_masks)
+			action = self.actions[action_index]
+			action.perform(self.game)
 		else:
-			# No other DQN agents are available yet, perform a random action
 			available_actions = [action for action in self.actions if action.enabled(self.game)]
 			random_action = random.choice(available_actions)
 			random_action.perform(self.game)
 
-	def _perform_enemy_moves(self):
+	def _perform_opponent_moves(self):
 		count = 0
-		while not self.game.game_ended and self.game.current_player_index != self.position:
-			self._perform_enemy_move()
+		while not self.game.game_ended and self.game.current_player_index != self.position_index:
+			self._perform_opponent_move()
 			count += 1
 
 	def _get_victory_points(self):
-		return self.game.players[self.position].victory_points
+		return self.game.players[self.position_index].victory_points
 
 	def _get_info(self):
 		info = {}
