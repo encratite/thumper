@@ -1,7 +1,12 @@
+from multiprocessing import Pool
 from os import path
 from environment import ThumperEnvironment
 from sb3_contrib import MaskablePPO
 from constants import *
+from callback import TensorboardCallback
+
+MULTI_PROCESS_TRAINING = False
+MAX_ITERATIONS = 4
 
 def get_positions():
 	positions = range(1, PLAYER_COUNT + 1)
@@ -46,6 +51,7 @@ def train_model(position, bootstrap):
 			"MlpPolicy",
 			environment,
 			learning_rate=1e-3,
+			n_steps=64,
 			device="cpu",
 			tensorboard_log="./tensorboard"
 		)
@@ -56,20 +62,45 @@ def train_model(position, bootstrap):
 		print(f"Training model \"{model_name}\" using bootstrapping")
 	else:
 		print(f"Training model \"{model_name}\" using pre-trained opponent models")
+	# Only enable progress bar for first worker to prevent tqdm progress bars from constantly overwriting each other
+	progress_bar = position == 1
+	callback = TensorboardCallback(environment)
 	model.learn(
 		total_timesteps=20_000 if bootstrap else 10_000,
-		progress_bar=True,
-		tb_log_name=model_name
+		progress_bar=progress_bar,
+		tb_log_name=model_name,
+		callback=callback
 	)
 	environment.close()
 	print(f"Saving model to {model_path}")
 	model.save(model_path)
 
-def train_models():
+def worker_bootstrap(position):
+	train_model(position, True)
+
+def worker_no_bootstrap(position):
+	train_model(position, False)
+
+def run_pool():
+	positions = get_positions()
+	with Pool(PLAYER_COUNT) as pool:
+		pool.map(worker_bootstrap, positions)
+	iteration = 1
+	while iteration < MAX_ITERATIONS:
+		print(f"Launching pool with pre-trained opponents (iteration {iteration})")
+		with Pool(PLAYER_COUNT) as pool:
+			pool.map(worker_no_bootstrap, positions)
+		iteration += 1
+
+def run_without_pool():
 	positions = get_positions()
 	for position in positions:
 		train_model(position, True)
 	for position in positions:
 		train_model(position, False)
 
-train_models()
+if MULTI_PROCESS_TRAINING:
+	if __name__ == "__main__":
+		run_pool()
+else:
+	run_without_pool()

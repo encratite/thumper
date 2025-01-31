@@ -13,6 +13,8 @@ class ThumperPlayer:
 		self.agents_left = INITIAL_AGENTS
 		self.victory_points = 0
 		self.conflict_victory_points = 0
+		self.previous_victory_points = 0
+		self.turns = 0
 		self.reset()
 
 	def reset(self):
@@ -33,3 +35,10 @@ class ThumperPlayer:
 		self.influence += reward.influence
 		self.spice = reward.spice
 		self.solari = reward.solari
+
+	def update_victory_points(self):
+		self.previous_victory_points = self.victory_points
+
+	def take_turn(self):
+		self.agents_left -= 1
+		self.turns += 1

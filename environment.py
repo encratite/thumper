@@ -23,6 +23,7 @@ class ThumperEnvironment(gym.Env):
 		self.position_index = position - 1
 		self.opponent_models = opponent_models
 		self.game = ThumperGame()
+		self.last_game_players = None
 		# Current round (1 to 8), one-hot encoded, so 0 to 1 each
 		nvec = MAX_ROUNDS * [2]
 		for i in range(PLAYER_COUNT):
@@ -55,6 +56,7 @@ class ThumperEnvironment(gym.Env):
 
 	def reset(self, seed=None, options=None):
 		super().reset(seed=seed)
+		self.last_game_players = self.game.players
 		self.game.reset()
 		# The game must be reset to a state in which it is the target player's turn
 		self._perform_opponent_moves()
@@ -67,12 +69,10 @@ class ThumperEnvironment(gym.Env):
 		assert not self.game.game_ended
 		assert 0 <= action < len(self.actions)
 		environment_action = self.actions[action]
-		victory_points_before = self._get_victory_points()
 		environment_action.perform(self.game)
 		self._perform_opponent_moves()
-		victory_points_after = self._get_victory_points()
 		observation = self._get_observation()
-		reward = victory_points_after - victory_points_before
+		reward = self._get_reward()
 		terminated = self.game.game_ended
 		truncated = False
 		info = self._get_info()
@@ -81,6 +81,14 @@ class ThumperEnvironment(gym.Env):
 	def action_masks(self):
 		masks = [action.enabled(self.game) for action in self.actions]
 		return masks
+
+	def get_last_game_players(self):
+		if self.last_game_players is not None:
+			output = self.last_game_players
+			self.last_game_players = None
+			return output
+		else:
+			return None
 
 	def _initialize_actions(self):
 		actions = [
@@ -304,8 +312,14 @@ class ThumperEnvironment(gym.Env):
 			self._perform_opponent_move()
 			count += 1
 
-	def _get_victory_points(self):
-		return self.game.players[self.position_index].victory_points
+	def _get_reward(self):
+		player = self.game.players[self.position_index]
+		if self.game.current_player.agents_left == 0:
+			reward = player.victory_points - player.previous_victory_points
+			player.update_victory_points()
+			return reward
+		else:
+			return 0
 
 	def _get_info(self):
 		info = {}

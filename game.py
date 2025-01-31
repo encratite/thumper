@@ -4,6 +4,8 @@ from error import ThumperError
 from conflict import ConflictReward
 
 class ThumperGame:
+	PRINT_END_OF_GAME_STATS = False
+
 	def __init__(self):
 		# Add placeholders to make PyCharm stop whining about prop
 		self.players = None
@@ -229,7 +231,7 @@ class ThumperGame:
 	def _next_turn(self):
 		if self.current_player.agents_left <= 0:
 			raise ThumperError("Performed an action even though the player had no actions left")
-		self.current_player.agents_left -= 1
+		self.current_player.take_turn()
 		for i in range(PLAYER_COUNT):
 			player_index = (self.current_player_index + 1 + i) % PLAYER_COUNT
 			player = self.players[player_index]
@@ -256,6 +258,14 @@ class ThumperGame:
 		else:
 			self.game_ended = True
 		self._update_victory_points()
+		if self.game_ended:
+			self._on_game_end()
+
+	def _on_game_end(self):
+		if ThumperGame.PRINT_END_OF_GAME_STATS:
+			print("Game ended:")
+			for player in self.players:
+				print(f"Victory points: {player.victory_points} ({player.conflict_victory_points} from conflicts), influence: {player.influence}, spice: {player.spice}, solari: {player.solari}, swordmaster: {player.swordmaster}, palace: {player.palace}, turns taken: {player.turns}")
 
 	def _resolve_conflict(self):
 		conflict_rewards = self.conflict_rewards[self.round - 1]
@@ -334,6 +344,12 @@ class ThumperGame:
 		])
 		# Round 8
 		rewards.append([
+			ConflictReward(0, 2, 3, 0),
+			ConflictReward(0, 1, 5, 0),
+			ConflictReward(0, 0, 3, 0)
+		])
+		# Round 9
+		rewards.append([
 			ConflictReward(2, 0, 0, 0),
 			ConflictReward(1, 0, 0, 0),
 			ConflictReward(0, 0, 3, 0)
@@ -358,10 +374,12 @@ class ThumperGame:
 		player1 = players[0]
 		player2 = players[1]
 		player3 = players[2]
+		min_influence = 6
 		if player1.influence > player2.influence:
-			player1.victory_points += 2
-			if player2.influence > player3.influence:
+			if player1.influence >= min_influence:
+				player1.victory_points += 2
+			if player2.influence >= min_influence and player2.influence > player3.influence:
 				player2.victory_points += 1
-		else:
+		elif player1.influence >= min_influence and player2.influence >= min_influence:
 			player1.victory_points += 1
 			player2.victory_points += 1
