@@ -3,10 +3,10 @@ from os import path
 from environment import ThumperEnvironment
 from sb3_contrib import MaskablePPO
 from constants import *
-from callback import TensorboardCallback
+from stats import TensorboardCallback
 
 MULTI_PROCESS_TRAINING = False
-MAX_ITERATIONS = 4
+MAX_ITERATIONS = 5
 
 def get_positions():
 	positions = range(1, PLAYER_COUNT + 1)
@@ -50,7 +50,7 @@ def train_model(position, bootstrap):
 		model = MaskablePPO(
 			"MlpPolicy",
 			environment,
-			learning_rate=1e-3,
+			learning_rate=1e-4,
 			n_steps=64,
 			device="cpu",
 			tensorboard_log="./tensorboard"
@@ -66,7 +66,7 @@ def train_model(position, bootstrap):
 	progress_bar = position == 1
 	callback = TensorboardCallback(environment)
 	model.learn(
-		total_timesteps=20_000 if bootstrap else 10_000,
+		total_timesteps=5_000 if bootstrap else 20_000,
 		progress_bar=progress_bar,
 		tb_log_name=model_name,
 		callback=callback

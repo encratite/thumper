@@ -24,6 +24,7 @@ class ThumperEnvironment(gym.Env):
 		self.opponent_models = opponent_models
 		self.game = ThumperGame()
 		self.last_game_players = None
+		self.last_action = None
 		# Current round (1 to 8), one-hot encoded, so 0 to 1 each
 		nvec = MAX_ROUNDS * [2]
 		for i in range(PLAYER_COUNT):
@@ -70,9 +71,12 @@ class ThumperEnvironment(gym.Env):
 		assert 0 <= action < len(self.actions)
 		environment_action = self.actions[action]
 		environment_action.perform(self.game)
+		self.last_action = environment_action.action_enum
 		self._perform_opponent_moves()
 		observation = self._get_observation()
 		reward = self._get_reward()
+		if self.position_index == 3 and environment_action.action_enum == Action.SWORDMASTER:
+			reward += 2
 		terminated = self.game.game_ended
 		truncated = False
 		info = self._get_info()

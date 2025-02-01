@@ -42,32 +42,32 @@ class ThumperGame:
 	def harvester(self):
 		self._check_game_ended()
 		self._perform_action(ActionType.ECONOMIC, Action.HARVESTER)
-		self.current_player.spice += 3
+		self.current_player.gain_spice(3)
 		self._next_turn()
 
 	def refinery(self):
 		self._check_game_ended()
 		self._perform_action(ActionType.ECONOMIC, Action.REFINERY)
-		self.current_player.spice += 2
-		self.current_player.solari += 1
+		self.current_player.gain_spice(2)
+		self.current_player.gain_solari(1)
 		self._next_turn()
 
 	def spice_silo(self):
 		self._check_game_ended()
 		self._perform_action(ActionType.ECONOMIC, Action.SPICE_SILO)
-		self.current_player.spice += self.spice_in_silo
+		self.current_player.gain_spice(self.spice_in_silo)
 		self._next_turn()
 
 	def sell_melange(self):
 		self._check_game_ended()
 		self._perform_action(ActionType.ECONOMIC, Action.SELL_MELANGE, spice=Cost.SELL_MELANGE)
-		self.current_player.solari += 8
+		self.current_player.gain_solari(8)
 		self._next_turn()
 
 	def secure_contract(self):
 		self._check_game_ended()
 		self._perform_action(ActionType.ECONOMIC, Action.SECURE_CONTRACT)
-		self.current_player.solari += 3
+		self.current_player.gain_solari(3)
 		self._next_turn()
 
 	# target is the ID of the target player (1 - 4)
@@ -117,7 +117,7 @@ class ThumperGame:
 		if self.current_player.troops_garrison < 1:
 			raise ThumperError("Not enough troops in garrison to loot villages")
 		self._perform_action(ActionType.MILITARY, Action.LOOT_VILLAGES)
-		self.current_player.solari += 4
+		self.current_player.gain_solari(4)
 		self.current_player.influence -= 1
 		self._next_turn()
 
@@ -164,7 +164,7 @@ class ThumperGame:
 		if type(action_type) is not ActionType:
 			raise ThumperError("Action type is not an action type enum")
 		self._perform_action(ActionType.POLITICAL, Action.POLITICAL_MANEUVERING)
-		self.current_player.solari += 1
+		self.current_player.gain_solari(1)
 		actions.append(action_type)
 		self._next_turn()
 
