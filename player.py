@@ -10,6 +10,7 @@ class ThumperPlayer:
 		self.influence = 0
 		self.swordmaster = False
 		self.palace = False
+		self.holtzman_shield = False
 		self.agents_left = INITIAL_AGENTS
 		self.victory_points = 0
 		self.conflict_victory_points = 0
@@ -20,17 +21,12 @@ class ThumperPlayer:
 		self.reset()
 
 	def reset(self):
-		actions = [
-			ActionType.ECONOMIC,
-			ActionType.MILITARY,
-			ActionType.POLITICAL
-		]
 		self.agents_left = 3 if self.swordmaster else 2
 		self.troops_deployed = 0
 		action_type_count = ACTION_TYPES
 		if self.swordmaster:
 			action_type_count += 1
-		self.actions = random.choices(actions, k=action_type_count)
+		self.actions = random.choices(list(ActionType), k=action_type_count)
 
 	def apply_reward(self, reward):
 		self.conflict_victory_points += reward.victory_points
@@ -52,3 +48,7 @@ class ThumperPlayer:
 	def gain_solari(self, amount):
 		self.solari += amount
 		self.solari_earned += amount
+
+	def add_action_type(self):
+		action_type = random.choice(list(ActionType))
+		self.actions.append(action_type)

@@ -16,6 +16,7 @@ class TensorboardCallback(BaseCallback):
 		self.victory_points_no_swordmaster = 0
 		self.swordmaster_count = 0
 		self.palace_count = 0
+		self.holtzman_shield_count = 0
 		self.spice_harvested = 0
 		self.solari_earned = 0
 		self.games_played = 0
@@ -43,6 +44,7 @@ class TensorboardCallback(BaseCallback):
 			"Sell Melange",
 			"Secure Contract",
 			# Military actions
+			"Holtzman Shield",
 			"Stone Burner",
 			"Hire Mercenaries",
 			"Quick Strike",
@@ -85,6 +87,8 @@ class TensorboardCallback(BaseCallback):
 			self.victory_points_no_swordmaster += player.victory_points
 		if player.palace:
 			self.palace_count += 1
+		if player.holtzman_shield:
+			self.holtzman_shield_count += 1
 		self.spice_harvested += player.spice_harvested
 		self.solari_earned += player.solari_earned
 		self.games_played += 1
@@ -93,6 +97,7 @@ class TensorboardCallback(BaseCallback):
 		average_victory_points_no_swordmaster = self._get_ratio(self.victory_points_no_swordmaster, self.games_played - self.swordmaster_count)
 		swordmaster_percentage = self._get_percentage(self.swordmaster_count, self.games_played)
 		palace_percentage = self._get_percentage(self.palace_count, self.games_played)
+		holtzman_shield_percentage = self._get_percentage(self.holtzman_shield_count, self.games_played)
 		spice_harvested = self._get_ratio(self.spice_harvested, self.games_played)
 		solari_earned = self._get_ratio(self.solari_earned, self.games_played)
 		self._record("victory_points", average_victory_points)
@@ -100,6 +105,7 @@ class TensorboardCallback(BaseCallback):
 		self._record("victory_points_no_swordmaster", average_victory_points_no_swordmaster)
 		self._record("swordmaster", swordmaster_percentage)
 		self._record("palace", palace_percentage)
+		self._record("holtzman_shield", holtzman_shield_percentage)
 		self._record("spice", spice_harvested)
 		self._record("solari", solari_earned)
 

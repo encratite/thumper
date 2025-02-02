@@ -67,7 +67,15 @@ class ThumperGame:
 	def secure_contract(self):
 		self._check_game_ended()
 		self._perform_action(ActionType.ECONOMIC, Action.SECURE_CONTRACT)
-		self.current_player.gain_solari(3)
+		self.current_player.gain_solari(2)
+		self._next_turn()
+
+	def holtzman_shield(self):
+		self._check_game_ended()
+		if self.current_player.holtzman_shield:
+			raise ThumperError("Player has already purchased Holtzman Shield upgrade")
+		self._perform_action(ActionType.MILITARY, Action.HOLTZMAN_SHIELD, spice=Cost.HOLTZMAN_SHIELD)
+		self.current_player.holtzman_shield = True
 		self._next_turn()
 
 	# target is the ID of the target player (1 - 4)
@@ -128,13 +136,14 @@ class ThumperGame:
 		self._perform_action(ActionType.POLITICAL, Action.SWORDMASTER)
 		self.current_player.swordmaster = True
 		self.current_player.agents_left += 1
+		self.current_player.add_action_type()
 		self._next_turn()
 
 	def sardaukar(self):
 		self._check_game_ended()
 		self._perform_action(ActionType.POLITICAL, Action.SARDAUKAR, spice=Cost.SARDAUKAR)
 		self.current_player.influence += 1
-		self.current_player.troops_garrison += 3
+		self.current_player.troops_garrison += 4
 		self._next_turn()
 
 	def audience_with_emperor(self):
@@ -148,12 +157,13 @@ class ThumperGame:
 		self._check_garrison()
 		self._check_troops(MOBILIZATION_TROOPS_PRODUCED, troops_deployed, MOBILIZATION_DEPLOYMENT_LIMIT)
 		self._perform_action(ActionType.POLITICAL, Action.MOBILIZATION, solari=Cost.MOBILIZATION)
+		self.current_player.influence += 1
 		self._deploy_troops(troops_deployed)
 		self._next_turn()
 
 	def seek_allies(self):
 		self._check_game_ended()
-		self._perform_action(ActionType.POLITICAL, Action.SEEK_ALLIES)
+		self._perform_action(ActionType.POLITICAL, Action.SEEK_ALLIES, solari=Cost.SEEK_ALLIES)
 		self.current_player.influence += 1
 		self._next_turn()
 
@@ -174,6 +184,9 @@ class ThumperGame:
 
 	def construct_palace_enabled(self):
 		return not self.current_player.palace
+
+	def holtzman_shield_enabled(self):
+		return not self.current_player.holtzman_shield
 
 	def stone_burner_enabled(self, target):
 		player = self.players[target - 1]
@@ -273,6 +286,8 @@ class ThumperGame:
 		reward_groups = {}
 		for player in conflict_players:
 			key = player.troops_deployed
+			if player.holtzman_shield:
+				key += 1
 			if key in reward_groups:
 				reward_groups[key].append(player)
 			else:

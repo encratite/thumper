@@ -5,7 +5,7 @@ from sb3_contrib import MaskablePPO
 from constants import *
 from stats import TensorboardCallback
 
-MULTI_PROCESS_TRAINING = False
+MULTI_PROCESS_TRAINING = True
 MAX_ITERATIONS = 5
 
 def get_positions():

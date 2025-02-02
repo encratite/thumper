@@ -25,7 +25,7 @@ class ThumperEnvironment(gym.Env):
 		self.game = ThumperGame()
 		self.last_game_players = None
 		self.last_action = None
-		# Current round (1 to 8), one-hot encoded, so 0 to 1 each
+		# Current round (1 to 9), one-hot encoded, so 0 to 1 each
 		nvec = MAX_ROUNDS * [2]
 		for i in range(PLAYER_COUNT):
 			nvec += [
@@ -46,6 +46,8 @@ class ThumperEnvironment(gym.Env):
 				# Swordmaster (0 to 1)
 				2,
 				# Palace (0 to 1)
+				2,
+				# Holtzman Shield (0 to 1)
 				2,
 				# Agents left (0 to 3)
 				4,
@@ -75,8 +77,8 @@ class ThumperEnvironment(gym.Env):
 		self._perform_opponent_moves()
 		observation = self._get_observation()
 		reward = self._get_reward()
-		if self.position_index == 3 and environment_action.action_enum == Action.SWORDMASTER:
-			reward += 2
+		# if self.position_index == 3 and environment_action.action_enum == Action.SWORDMASTER:
+		# reward += 1
 		terminated = self.game.game_ended
 		truncated = False
 		info = self._get_info()
@@ -128,6 +130,13 @@ class ThumperEnvironment(gym.Env):
 				self.game.secure_contract,
 				ActionType.ECONOMIC,
 				Action.SECURE_CONTRACT
+			),
+			EnvironmentAction(
+				self.game.holtzman_shield,
+				ActionType.MILITARY,
+				Action.HOLTZMAN_SHIELD,
+				spice=Cost.HOLTZMAN_SHIELD,
+				enabled=self.game.holtzman_shield_enabled
 			),
 			EnvironmentAction(
 				self.game.stone_burner,
@@ -207,7 +216,8 @@ class ThumperEnvironment(gym.Env):
 			EnvironmentAction(
 				self.game.seek_allies,
 				ActionType.POLITICAL,
-				Action.SEEK_ALLIES
+				Action.SEEK_ALLIES,
+				solari=Cost.SEEK_ALLIES
 			),
 			EnvironmentAction(
 				self.game.political_maneuvering,
@@ -266,6 +276,7 @@ class ThumperEnvironment(gym.Env):
 
 		swordmaster = self._from_bool(player.swordmaster)
 		palace = self._from_bool(player.palace)
+		holtzman_shield = self._from_bool(player.holtzman_shield)
 		observation = self._from_action_types(player)
 		observation += [
 			adjust(player.spice),
@@ -275,6 +286,7 @@ class ThumperEnvironment(gym.Env):
 			adjust_influence(player.influence),
 			swordmaster,
 			palace,
+			holtzman_shield,
 			player.agents_left,
 			player.victory_points
 		]
