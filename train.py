@@ -51,6 +51,8 @@ def train_model(position, bootstrap):
 			"MlpPolicy",
 			environment,
 			learning_rate=1e-4,
+			gamma=0.995 if position == 2 else 0.99,
+			gae_lambda=0.96 if position == 2 else 0.95,
 			n_steps=64,
 			device="cpu",
 			tensorboard_log="./tensorboard"
@@ -66,7 +68,7 @@ def train_model(position, bootstrap):
 	progress_bar = position == 1
 	callback = TensorboardCallback(environment)
 	model.learn(
-		total_timesteps=5_000 if bootstrap else 20_000,
+		total_timesteps=5_000 if bootstrap else 30_000,
 		progress_bar=progress_bar,
 		tb_log_name=model_name,
 		callback=callback

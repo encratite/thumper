@@ -1,10 +1,10 @@
-from argparse import ArgumentError
 import random
 
 import gymnasium as gym
 import numpy as np
 from game import ThumperGame
 from constants import *
+from action import EnvironmentAction
 
 class ThumperEnvironment(gym.Env):
 	"""
@@ -26,7 +26,10 @@ class ThumperEnvironment(gym.Env):
 		self.last_game_players = None
 		self.last_action = None
 		# Current round (1 to 9), one-hot encoded, so 0 to 1 each
-		nvec = MAX_ROUNDS * [2]
+		one_hot_encoding = MAX_ROUNDS * [2]
+		nvec = one_hot_encoding
+		# Conflict reward
+		nvec += one_hot_encoding
 		for i in range(PLAYER_COUNT):
 			nvec += [
 				# Action type counts (0 - 4)
@@ -124,7 +127,22 @@ class ThumperEnvironment(gym.Env):
 				self.game.sell_melange,
 				ActionType.ECONOMIC,
 				Action.SELL_MELANGE,
-				spice=Cost.SELL_MELANGE
+				spice=1,
+				argument=1
+			),
+			EnvironmentAction(
+				self.game.sell_melange,
+				ActionType.ECONOMIC,
+				Action.SELL_MELANGE,
+				spice=2,
+				argument=2
+			),
+			EnvironmentAction(
+				self.game.sell_melange,
+				ActionType.ECONOMIC,
+				Action.SELL_MELANGE,
+				spice=3,
+				argument=3
 			),
 			EnvironmentAction(
 				self.game.secure_contract,
@@ -181,8 +199,7 @@ class ThumperEnvironment(gym.Env):
 			EnvironmentAction(
 				self.game.loot_villages,
 				ActionType.MILITARY,
-				Action.LOOT_VILLAGES,
-				enabled=self.game.has_garrison
+				Action.LOOT_VILLAGES
 			),
 			EnvironmentAction(
 				self.game.swordmaster,
@@ -258,14 +275,21 @@ class ThumperEnvironment(gym.Env):
 
 	def _get_observation(self):
 		# One-hot encoding of the current round
-		observation = []
-		for i in range(MAX_ROUNDS):
-			value = 1 if self.game.round == i + 1 else 0
-			observation.append(value)
+		observation = self._get_one_hot_encoding(self.game.round)
+		# One-hot encoding of the randomized conflict rewards
+		conflict = self.game.conflicts[self.game.round - 1]
+		observation += self._get_one_hot_encoding(conflict.id)
 		# Resources, etc., of each player
 		for player in self.game.players:
 			observation += self._get_player_observation(player)
 		return np.array(observation, dtype=np.int8)
+
+	def _get_one_hot_encoding(self, value):
+		observation = []
+		for i in range(MAX_ROUNDS):
+			value = 1 if value == i + 1 else 0
+			observation.append(value)
+		return observation
 
 	def _get_player_observation(self, player):
 		def adjust(x):
@@ -340,63 +364,3 @@ class ThumperEnvironment(gym.Env):
 	def _get_info(self):
 		info = {}
 		return info
-
-class EnvironmentAction:
-	def __init__(self, action, action_type, action_enum, solari=0, spice=0, garrison=0, enabled=None, enabled_argument=False, argument=None, expand=None, troops_produced=None, deployment_limit=None):
-		self.action = action
-		self.action_type = action_type
-		self.action_enum = action_enum
-		self.solari = solari
-		self.spice = spice
-		self.garrison = garrison
-		self.enabled_check = enabled
-		self.enabled_argument = enabled_argument
-		self.argument = argument
-		self.expand = expand
-		self.troops_produced = troops_produced
-		self.deployment_limit = deployment_limit
-
-	def argument_copy(self, argument):
-		return EnvironmentAction(
-			self.action,
-			self.action_type,
-			self.action_enum,
-			solari=self.solari,
-			spice=self.spice,
-			enabled=self.enabled_check,
-			enabled_argument=self.enabled_argument,
-			argument=argument,
-			troops_produced=self.troops_produced,
-			deployment_limit=self.deployment_limit
-		)
-
-	def enabled(self, game):
-		player = game.current_player
-		enabled = not game.game_ended
-		enabled = enabled and game.current_player.agents_left > 0
-		enabled = enabled and (self.action_enum is None or self.action_enum in game.available_actions)
-		enabled = enabled and (self.action_type is None or self.action_type in player.actions)
-		enabled = enabled and player.spice >= self.spice
-		enabled = enabled and player.solari >= self.solari
-		enabled = enabled and player.troops_garrison >= self.garrison
-		if self.enabled_argument:
-			enabled = enabled and (self.enabled_check is None or self.enabled_check(self.argument))
-		else:
-			enabled = enabled and (self.enabled_check is None or self.enabled_check())
-		enabled = enabled and (self.troops_produced is None or self.deployment_limit is None or self._valid_deployment(game))
-		return enabled
-
-	def perform(self, game):
-		assert self.enabled(game)
-		if self.argument is None:
-			self.action()
-		else:
-			self.action(self.argument)
-
-	def _valid_deployment(self, game):
-		troops_deployed = self.argument
-		if troops_deployed < 0 or troops_deployed > self.deployment_limit:
-			return False
-		if game.current_player.troops_garrison + self.troops_produced < troops_deployed:
-			return False
-		return True

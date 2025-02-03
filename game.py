@@ -1,7 +1,8 @@
+import random
 from constants import *
 from player import ThumperPlayer
 from error import ThumperError
-from conflict import ConflictReward
+from conflict import Conflict, ConflictReward
 
 class ThumperGame:
 	PRINT_END_OF_GAME_STATS = False
@@ -58,16 +59,25 @@ class ThumperGame:
 		self.current_player.gain_spice(self.spice_in_silo)
 		self._next_turn()
 
-	def sell_melange(self):
+	def sell_melange(self, amount):
 		self._check_game_ended()
-		self._perform_action(ActionType.ECONOMIC, Action.SELL_MELANGE, spice=Cost.SELL_MELANGE)
-		self.current_player.gain_solari(8)
+		match amount:
+			case 1:
+				solari = 3
+			case 2:
+				solari = 6
+			case 3:
+				solari = 8
+			case _:
+				raise ThumperError("Invalid amount of spice specified")
+		self._perform_action(ActionType.ECONOMIC, Action.SELL_MELANGE, spice=amount)
+		self.current_player.gain_solari(solari)
 		self._next_turn()
 
 	def secure_contract(self):
 		self._check_game_ended()
 		self._perform_action(ActionType.ECONOMIC, Action.SECURE_CONTRACT)
-		self.current_player.gain_solari(2)
+		self.current_player.gain_solari(3)
 		self._next_turn()
 
 	def holtzman_shield(self):
@@ -76,6 +86,7 @@ class ThumperGame:
 			raise ThumperError("Player has already purchased Holtzman Shield upgrade")
 		self._perform_action(ActionType.MILITARY, Action.HOLTZMAN_SHIELD, spice=Cost.HOLTZMAN_SHIELD)
 		self.current_player.holtzman_shield = True
+		self.current_player.troops_garrison += 1
 		self._next_turn()
 
 	# target is the ID of the target player (1 - 4)
@@ -85,10 +96,16 @@ class ThumperGame:
 		if target < 1 or target > PLAYER_COUNT or target_index == self.current_player_index:
 			raise ThumperError("Invalid target player index")
 		target_player = self.players[target_index]
-		if target_player.troops_garrison == 0:
-			raise ThumperError("Stone Burner can only be used against players that have troops in their garrison")
+		if target_player.troops_garrison == 0 and target_player.troops_deployed == 0:
+			raise ThumperError("Stone Burner can only be used against players that have at least one troop")
 		self._perform_action(ActionType.MILITARY, Action.STONE_BURNER, spice=Cost.STONE_BURNER)
-		target_player.troops_garrison = max(target_player.troops_garrison - 3, 0)
+		troops_to_kill = 3
+		while troops_to_kill > 0 and target_player.troops_deployed > 0:
+			target_player.troops_deployed -= 1
+			troops_to_kill -= 1
+		while troops_to_kill > 0 and target_player.troops_garrison > 0:
+			target_player.troops_garrison -= 1
+			troops_to_kill -= 1
 		self.current_player.influence -= 1
 		self._next_turn()
 
@@ -122,9 +139,8 @@ class ThumperGame:
 
 	def loot_villages(self):
 		self._check_game_ended()
-		if self.current_player.troops_garrison < 1:
-			raise ThumperError("Not enough troops in garrison to loot villages")
 		self._perform_action(ActionType.MILITARY, Action.LOOT_VILLAGES)
+		self.current_player.gain_spice(1)
 		self.current_player.gain_solari(4)
 		self.current_player.influence -= 1
 		self._next_turn()
@@ -132,7 +148,7 @@ class ThumperGame:
 	def swordmaster(self):
 		self._check_game_ended()
 		if self.current_player.swordmaster:
-			raise ThumperError("Player already recruited their third agent")
+			raise ThumperError("Player already recruited their swordmaster")
 		self._perform_action(ActionType.POLITICAL, Action.SWORDMASTER)
 		self.current_player.swordmaster = True
 		self.current_player.agents_left += 1
@@ -281,7 +297,8 @@ class ThumperGame:
 				print(f"Victory points: {player.victory_points} ({player.conflict_victory_points} from conflicts), influence: {player.influence}, spice: {player.spice}, solari: {player.solari}, swordmaster: {player.swordmaster}, palace: {player.palace}, turns taken: {player.turns}")
 
 	def _resolve_conflict(self):
-		conflict_rewards = self.conflict_rewards[self.round - 1]
+		conflict = self.conflicts[self.round - 1]
+		conflict_rewards = conflict.rewards
 		conflict_players = filter(lambda p: p.troops_deployed > 0, self.players)
 		reward_groups = {}
 		for player in conflict_players:
@@ -314,62 +331,76 @@ class ThumperGame:
 						player.apply_reward(reward)
 
 	def _set_conflict_rewards(self):
-		rewards = []
-		# Round 1
-		rewards.append([
+		rewards1 = [
 			ConflictReward(0, 1, 0, 2),
 			ConflictReward(0, 0, 0, 3),
 			ConflictReward(0, 0, 0, 2)
-		])
-		# Round 2
-		rewards.append([
+		]
+		rewards2 = [
 			ConflictReward(1, 0, 0, 0),
 			ConflictReward(0, 0, 1, 2),
 			ConflictReward(0, 0, 1, 0)
-		])
-		# Round 3
-		rewards.append([
+		]
+		rewards3 = [
 			ConflictReward(0, 0, 0, 6),
 			ConflictReward(0, 0, 0, 4),
 			ConflictReward(0, 0, 0, 2)
-		])
-		# Round 4
-		rewards.append([
+		]
+		rewards4 = [
 			ConflictReward(1, 0, 0, 0),
 			ConflictReward(0, 0, 2, 0),
 			ConflictReward(0, 0, 0, 1)
-		])
-		# Round 5
-		rewards.append([
+		]
+		rewards5 = [
 			ConflictReward(0, 2, 0, 0),
 			ConflictReward(0, 0, 2, 0),
 			ConflictReward(0, 0, 1, 0)
-		])
-		# Round 6
-		rewards.append([
+		]
+		rewards6 = [
 			ConflictReward(1, 0, 0, 0),
 			ConflictReward(0, 0, 2, 0),
 			ConflictReward(0, 0, 1, 0)
-		])
-		# Round 7
-		rewards.append([
+		]
+		rewards7 = [
 			ConflictReward(2, 0, 0, 0),
 			ConflictReward(0, 0, 5, 0),
 			ConflictReward(0, 0, 3, 0)
-		])
-		# Round 8
-		rewards.append([
+		]
+		rewards8 = [
 			ConflictReward(0, 2, 3, 0),
 			ConflictReward(0, 1, 5, 0),
 			ConflictReward(0, 0, 3, 0)
-		])
-		# Round 9
-		rewards.append([
+		]
+		rewards9 = [
 			ConflictReward(2, 0, 0, 0),
 			ConflictReward(1, 0, 0, 0),
 			ConflictReward(0, 0, 3, 0)
-		])
-		self.conflict_rewards = rewards
+		]
+		level1 = [
+			Conflict(1, rewards1)
+		]
+		level2 = [
+			Conflict(2, rewards2),
+			Conflict(3, rewards3),
+			Conflict(4, rewards4),
+			Conflict(5, rewards5),
+			Conflict(6, rewards6)
+		]
+		level3 = [
+			Conflict(7, rewards7),
+			Conflict(8, rewards8),
+			Conflict(9, rewards9)
+		]
+		levels = [
+			level1,
+			level2,
+			level3
+		]
+		self.conflicts = []
+		for level in levels:
+			random.shuffle(level)
+			self.conflicts += level
+		assert len(self.conflicts) == MAX_ROUNDS
 
 	def _update_victory_points(self):
 		for player in self.players:
