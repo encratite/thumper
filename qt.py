@@ -56,12 +56,13 @@ class ThumperQt(QWidget):
 		self._add_button("Harvester", ActionType.ECONOMIC, Action.HARVESTER, self._harvester)
 		self._add_button("Refinery", ActionType.ECONOMIC, Action.REFINERY, self._refinery)
 		self._add_button("Spice Silo", ActionType.ECONOMIC, Action.SPICE_SILO, self._spice_silo, on_update=self._update_spice_silo_button)
-		self._add_button("Sell Melange", ActionType.ECONOMIC, Action.SELL_MELANGE, self._sell_melange, spice=Cost.SELL_MELANGE)
+		self._add_button("Sell Melange", ActionType.ECONOMIC, Action.SELL_MELANGE, self._sell_melange, spice=1)
 		self._add_button("Secure Contract", ActionType.ECONOMIC, Action.SECURE_CONTRACT, self._secure_contract)
 		self._new_button_column()
 
 		self._add_button_label("Military:")
-		self._add_button("Stone Burner", ActionType.MILITARY, Action.STONE_BURNER, self._stone_burner, spice=Cost.STONE_BURNER, enabled=self.game.stone_burner_enabled)
+		self._add_button("Holtzman Shield", ActionType.MILITARY, Action.HOLTZMAN_SHIELD, self._holtzman_shield, spice=Cost.HOLTZMAN_SHIELD, enabled=self.game.holtzman_shield_enabled)
+		self._add_button("Stone Burner", ActionType.MILITARY, Action.STONE_BURNER, self._stone_burner, spice=Cost.STONE_BURNER, enabled=self.game.stone_burner_enabled_no_target)
 		self._add_button("Hire Mercenaries", ActionType.MILITARY, Action.HIRE_MERCENARIES, self._hire_mercenaries, solari=Cost.HIRE_MERCENARIES)
 		self._add_button("Quick Strike", ActionType.MILITARY, Action.QUICK_STRIKE, self._quick_strike)
 		self._add_button("Recruitment Center", ActionType.MILITARY, Action.RECRUITMENT_CENTER, self._recruitment_center)
@@ -86,6 +87,7 @@ class ThumperQt(QWidget):
 		self.table_model = PlayerTableModel(self.game)
 		self.table.setModel(self.table_model)
 		self.table.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Expanding)
+		self.table.setStyleSheet("margin-top: 20px")
 		vertical_header = self.table.verticalHeader()
 		vertical_header.hide()
 		horizontal_header = self.table.horizontalHeader()
@@ -137,10 +139,17 @@ class ThumperQt(QWidget):
 		self.game.spice_silo()
 
 	def _sell_melange(self):
-		self.game.sell_melange()
+		spice_limit = min(self.game.current_player.spice, Cost.SELL_MELANGE_MAX)
+		spice, ok = QInputDialog.getInt(None, "Sell Melange", "How much spice would you like to sell?", value=spice_limit, min=1, max=spice_limit)
+		if not ok:
+			return
+		self.game.sell_melange(spice)
 
 	def _secure_contract(self):
 		self.game.secure_contract()
+
+	def _holtzman_shield(self):
+		self.game.holtzman_shield()
 
 	def _stone_burner(self):
 		other_players = filter(lambda player: player is not self.game.current_player, self.game.players)

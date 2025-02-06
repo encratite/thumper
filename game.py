@@ -208,6 +208,15 @@ class ThumperGame:
 		player = self.players[target - 1]
 		return player is not self.current_player and player.troops_garrison > 0
 
+	def stone_burner_enabled_no_target(self):
+		for i in range(PLAYER_COUNT):
+			if i == self.current_player_index:
+				continue
+			target = i + 1
+			if self.stone_burner_enabled(target):
+				return True
+		return False
+
 	def has_garrison(self):
 		return self.current_player.troops_garrison > 0
 
