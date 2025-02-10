@@ -1,3 +1,4 @@
+import functools
 import pettingzoo.utils.env
 from gymnasium.spaces import Discrete, MultiDiscrete, Box, Space, Dict
 from gymnasium.utils import EzPickle
@@ -75,9 +76,11 @@ class raw_env(AECEnv, EzPickle):
 			for name in self.agents
 		}
 
+	@functools.lru_cache(maxsize=None)
 	def observation_space(self, agent: AgentID) -> Space:
 		return self.observation_spaces[agent]
 
+	@functools.lru_cache(maxsize=None)
 	def action_space(self, agent: AgentID) -> Space:
 		return self.action_spaces[agent]
 
@@ -121,6 +124,17 @@ class raw_env(AECEnv, EzPickle):
 			return output
 		else:
 			return None
+
+	def get_shapes(self):
+		agent = self.agents[0]
+		state_shape = self.observation_spaces[agent]["observation"].shape
+		action_shape = self.action_spaces[agent].n
+		return state_shape, action_shape
+
+	def get_action_space(self):
+		agent = self.agents[0]
+		action_space = self.action_spaces[agent]
+		return action_space
 
 	def _reset_common(self):
 		self.agent_selection = self.agents[0]

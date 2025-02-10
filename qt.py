@@ -2,7 +2,7 @@ from functools import partial
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (QWidget, QGridLayout, QLabel, QPushButton, QHeaderView, QSizePolicy, QInputDialog, QMessageBox, QDialog)
 from game import ThumperGame
-from constants import *
+from constants import Action, ActionType, Cost
 from table import ExpandingTableView, PlayerTableModel
 from radio import RadioButtonDialog
 
@@ -268,5 +268,5 @@ class ActionButton:
 		self.button.setEnabled(enabled)
 		style = "" if available else "color: #d00000"
 		self.button.setStyleSheet(style)
-		if self.on_update != None:
+		if self.on_update is not None:
 			self.on_update(self.button, game)
