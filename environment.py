@@ -1,36 +1,44 @@
-import random
-
-import gymnasium as gym
+import pettingzoo.utils.env
+from gymnasium.spaces import Discrete, MultiDiscrete, Box, Space, Dict
+from gymnasium.utils import EzPickle
+from pettingzoo.utils.env import AgentID, ObsType
+from pettingzoo import AECEnv
+from pettingzoo.utils import wrappers
 import numpy as np
 from game import ThumperGame
-from constants import *
+from constants import Constant, Action, ActionType, Cost
 from action import EnvironmentAction
 
-class ThumperEnvironment(gym.Env):
-	"""
-	Creates an OpenAI gym environment for the Thumper proof of concept game.
-	The models are only meant to be trained for a particular position on the table.
-	All other players are assumed to be controlled by other reinforcement learning models that were trained in an identical fashion.
-	If no other models are provided (i.e. models = None), the environment will randomize the actions of the other players instead.
-	This is initially done to bootstrap the training of all models.
-	The DQN agent corresponding to the specified position (i.e. models[position]) is not used by the environment.
+def env(**kwargs):
+	environment = raw_env(**kwargs)
+	environment = wrappers.TerminateIllegalWrapper(environment, illegal_reward=-1)
+	environment = wrappers.AssertOutOfBoundsWrapper(environment)
+	environment = wrappers.OrderEnforcingWrapper(environment)
+	return environment
 
-	Arguments:
-		position: an int from 0 to PLAYER_COUNT - 1 that determines the player's position on the table
-		opponent_models: a list of PLAYER_COUNT DQN agents that represent the AIs that will control the other players
-	"""
-	def __init__(self, position, opponent_models=None):
-		self.position_index = position - 1
-		self.opponent_models = opponent_models
+class raw_env(AECEnv, EzPickle):
+	metadata = {
+		"render_modes": [],
+		"name": "Thumper-v0",
+		"is_parallelizable": False,
+		"render_fps": 1,
+	}
+
+	def __init__(self, render_mode: str | None = None, screen_height: int | None = 800):
+		EzPickle.__init__(self, render_mode, screen_height)
+		super().__init__()
 		self.game = ThumperGame()
 		self.last_game_players = None
 		self.last_action = None
+		self.agents: list[AgentID] = [f"player_{str(i)}" for i in range(Constant.PLAYER_COUNT)]
+		self.possible_agents = self.agents[:]
+		self._reset_common()
 		# Current round (1 to 9), one-hot encoded, so 0 to 1 each
-		one_hot_encoding = MAX_ROUNDS * [2]
+		one_hot_encoding = Constant.MAX_ROUNDS * [2]
 		nvec = one_hot_encoding
 		# Conflict reward
 		nvec += one_hot_encoding
-		for i in range(PLAYER_COUNT):
+		for i in range(Constant.PLAYER_COUNT):
 			nvec += [
 				# Action type counts (0 - 4)
 				5,
@@ -57,35 +65,50 @@ class ThumperEnvironment(gym.Env):
 				# Victory points (0 to 12)
 				13
 			]
-		self.observation_space = gym.spaces.MultiDiscrete(nvec, dtype=np.int8)
 		self._initialize_actions()
+		total_actions = len(self.actions)
+		self.observation_spaces: dict[AgentID, Dict] = {
+			name: Dict({
+				"observation": MultiDiscrete(nvec, dtype=np.int8),
+				"action_mask": Box(low=0, high=1, shape=(total_actions,), dtype=np.int8)
+			})
+			for name in self.agents
+		}
 
-	def reset(self, seed=None, options=None):
-		super().reset(seed=seed)
+	def observation_space(self, agent: AgentID) -> Space:
+		return self.observation_spaces[agent]
+
+	def action_space(self, agent: AgentID) -> Space:
+		return self.action_spaces[agent]
+
+	def observe(self, agent: AgentID) -> ObsType | None:
+		observation = self._get_observation()
+		action_mask = [1 if action.enabled(self.game) else 0 for action in self.actions]
+		output = {
+			"observation": observation,
+			"action_mask": action_mask
+		}
+		return output
+
+	def reset(self, seed: int | None = None, options: dict | None = None) -> None:
+		self._reset_common()
 		self.last_game_players = self.game.players
 		self.game.reset()
-		# The game must be reset to a state in which it is the target player's turn
-		self._perform_opponent_moves()
-		assert self.game.round == 1
-		observation = self._get_observation()
-		info = self._get_info()
-		return observation, info
 
-	def step(self, action):
+	def step(self, action: pettingzoo.utils.env.ActionType) -> None:
 		assert not self.game.game_ended
 		assert 0 <= action < len(self.actions)
 		environment_action = self.actions[action]
 		environment_action.perform(self.game)
+		self.agent_selection = self.agents[self.game.current_player_index]
 		self.last_action = environment_action.action_enum
-		self._perform_opponent_moves()
-		observation = self._get_observation()
-		reward = self._get_reward()
-		# if self.position_index == 3 and environment_action.action_enum == Action.SWORDMASTER:
-		# reward += 1
-		terminated = self.game.game_ended
-		truncated = False
-		info = self._get_info()
-		return observation, reward, terminated, truncated, info
+		self.rewards = {}
+		for i in range(Constant.PLAYER_COUNT):
+			player = self.game.players[i]
+			reward = player.get_reward()
+			name = self.agents[i]
+			self.rewards[name] = reward
+		self.terminations = {name: self.game.game_ended for name in self.agents}
 
 	def action_masks(self):
 		masks = [action.enabled(self.game) for action in self.actions]
@@ -98,6 +121,13 @@ class ThumperEnvironment(gym.Env):
 			return output
 		else:
 			return None
+
+	def _reset_common(self):
+		self.agent_selection = self.agents[0]
+		self.rewards = {name: 0 for name in self.agents}
+		self.terminations = {name: False for name in self.agents}
+		self.truncations = {name: False for name in self.agents}
+		self.infos = {name: {} for name in self.agents}
 
 	def _initialize_actions(self):
 		actions = [
@@ -163,23 +193,23 @@ class ThumperEnvironment(gym.Env):
 				spice=Cost.STONE_BURNER,
 				enabled=self.game.stone_burner_enabled,
 				enabled_argument=True,
-				expand=(1, PLAYER_COUNT)
+				expand=(1, Constant.PLAYER_COUNT)
 			),
 			EnvironmentAction(
 				self.game.hire_mercenaries,
 				ActionType.MILITARY,
 				Action.HIRE_MERCENARIES,
 				solari=Cost.HIRE_MERCENARIES,
-				troops_produced=HIRE_MERCENARIES_TROOPS_PRODUCED,
-				deployment_limit=HIRE_MERCENARIES_DEPLOYMENT_LIMIT,
+				troops_produced=Constant.HIRE_MERCENARIES_TROOPS_PRODUCED,
+				deployment_limit=Constant.HIRE_MERCENARIES_DEPLOYMENT_LIMIT,
 				expand=(0, 3)
 			),
 			EnvironmentAction(
 				self.game.quick_strike,
 				ActionType.MILITARY,
 				Action.QUICK_STRIKE,
-				troops_produced=QUICK_STRIKE_TROOPS_PRODUCED,
-				deployment_limit=QUICK_STRIKE_DEPLOYMENT_LIMIT,
+				troops_produced=Constant.QUICK_STRIKE_TROOPS_PRODUCED,
+				deployment_limit=Constant.QUICK_STRIKE_DEPLOYMENT_LIMIT,
 				expand=(0, 2)
 			),
 			EnvironmentAction(
@@ -192,8 +222,8 @@ class ThumperEnvironment(gym.Env):
 				ActionType.MILITARY,
 				Action.TROOP_TRANSPORTS,
 				enabled=self.game.has_garrison,
-				troops_produced=TROOP_TRANSPORTS_TROOPS_PRODUCED,
-				deployment_limit=TROOP_TRANSPORTS_DEPLOYMENT_LIMIT,
+				troops_produced=Constant.TROOP_TRANSPORTS_TROOPS_PRODUCED,
+				deployment_limit=Constant.TROOP_TRANSPORTS_DEPLOYMENT_LIMIT,
 				expand=(0, 4)
 			),
 			EnvironmentAction(
@@ -226,8 +256,8 @@ class ThumperEnvironment(gym.Env):
 				Action.MOBILIZATION,
 				solari=Cost.MOBILIZATION,
 				enabled=self.game.has_garrison,
-				troops_produced=MOBILIZATION_TROOPS_PRODUCED,
-				deployment_limit=MOBILIZATION_DEPLOYMENT_LIMIT,
+				troops_produced=Constant.MOBILIZATION_TROOPS_PRODUCED,
+				deployment_limit=Constant.MOBILIZATION_DEPLOYMENT_LIMIT,
 				expand=(0, 5)
 			),
 			EnvironmentAction(
@@ -271,7 +301,7 @@ class ThumperEnvironment(gym.Env):
 				self.actions.append(action)
 		# The action space consists of indexes into self.actions
 		total_actions = len(self.actions)
-		self.action_space = gym.spaces.Discrete(total_actions)
+		self.action_spaces = {name: Discrete(total_actions) for name in self.agents}
 
 	def _get_observation(self):
 		# One-hot encoding of the current round
@@ -286,7 +316,7 @@ class ThumperEnvironment(gym.Env):
 
 	def _get_one_hot_encoding(self, value):
 		observation = []
-		for i in range(MAX_ROUNDS):
+		for i in range(Constant.MAX_ROUNDS):
 			value = 1 if value == i + 1 else 0
 			observation.append(value)
 		return observation
@@ -330,37 +360,3 @@ class ThumperEnvironment(gym.Env):
 			index = actions.index(action)
 			observations[index] += 1
 		return observations
-
-	def _perform_opponent_move(self):
-		assert not self.game.game_ended
-		assert self.game.current_player_index != self.position_index
-		if self.opponent_models is not None:
-			observation = self._get_observation()
-			opponent_model = self.opponent_models[self.game.current_player_index]
-			action_masks = self.action_masks()
-			action_index, _info = opponent_model.predict(observation, deterministic=True, action_masks=action_masks)
-			action = self.actions[action_index]
-			action.perform(self.game)
-		else:
-			available_actions = [action for action in self.actions if action.enabled(self.game)]
-			random_action = random.choice(available_actions)
-			random_action.perform(self.game)
-
-	def _perform_opponent_moves(self):
-		count = 0
-		while not self.game.game_ended and self.game.current_player_index != self.position_index:
-			self._perform_opponent_move()
-			count += 1
-
-	def _get_reward(self):
-		player = self.game.players[self.position_index]
-		if self.game.current_player.agents_left == 0:
-			reward = player.victory_points - player.previous_victory_points
-			player.update_victory_points()
-			return reward
-		else:
-			return 0
-
-	def _get_info(self):
-		info = {}
-		return info

@@ -1,5 +1,5 @@
 import random
-from constants import *
+from constants import Constant, Action, ActionType, Cost
 from player import ThumperPlayer
 from error import ThumperError
 from conflict import Conflict, ConflictReward
@@ -19,7 +19,7 @@ class ThumperGame:
 		self.reset()
 
 	def reset(self):
-		self.players = [ThumperPlayer() for _ in range(PLAYER_COUNT)]
+		self.players = [ThumperPlayer() for _ in range(Constant.PLAYER_COUNT)]
 		# The current round (1 - 8)
 		self.round = 1
 		# The player who was the first player in the current round, as an index into players
@@ -93,13 +93,13 @@ class ThumperGame:
 	def stone_burner(self, target):
 		self._check_game_ended()
 		target_index = target - 1
-		if target < 1 or target > PLAYER_COUNT or target_index == self.current_player_index:
+		if target < 1 or target > Constant.PLAYER_COUNT or target_index == self.current_player_index:
 			raise ThumperError("Invalid target player index")
 		target_player = self.players[target_index]
 		if target_player.troops_garrison == 0 and target_player.troops_deployed == 0:
 			raise ThumperError("Stone Burner can only be used against players that have at least one troop")
 		self._perform_action(ActionType.MILITARY, Action.STONE_BURNER, spice=Cost.STONE_BURNER)
-		troops_to_kill = 3
+		troops_to_kill = 4
 		while troops_to_kill > 0 and target_player.troops_deployed > 0:
 			target_player.troops_deployed -= 1
 			troops_to_kill -= 1
@@ -111,16 +111,16 @@ class ThumperGame:
 
 	def hire_mercenaries(self, troops_deployed):
 		self._check_game_ended()
-		self._check_troops(HIRE_MERCENARIES_TROOPS_PRODUCED, troops_deployed, HIRE_MERCENARIES_DEPLOYMENT_LIMIT)
+		self._check_troops(Constant.HIRE_MERCENARIES_TROOPS_PRODUCED, troops_deployed, Constant.HIRE_MERCENARIES_DEPLOYMENT_LIMIT)
 		self._perform_action(ActionType.MILITARY, Action.HIRE_MERCENARIES, solari=Cost.HIRE_MERCENARIES)
-		self._produce_and_deploy_troops(HIRE_MERCENARIES_TROOPS_PRODUCED, troops_deployed)
+		self._produce_and_deploy_troops(Constant.HIRE_MERCENARIES_TROOPS_PRODUCED, troops_deployed)
 		self._next_turn()
 
 	def quick_strike(self, troops_deployed):
 		self._check_game_ended()
-		self._check_troops(QUICK_STRIKE_TROOPS_PRODUCED, troops_deployed, QUICK_STRIKE_DEPLOYMENT_LIMIT)
+		self._check_troops(Constant.QUICK_STRIKE_TROOPS_PRODUCED, troops_deployed, Constant.QUICK_STRIKE_DEPLOYMENT_LIMIT)
 		self._perform_action(ActionType.MILITARY, Action.QUICK_STRIKE)
-		self._produce_and_deploy_troops(QUICK_STRIKE_TROOPS_PRODUCED, troops_deployed)
+		self._produce_and_deploy_troops(Constant.QUICK_STRIKE_TROOPS_PRODUCED, troops_deployed)
 		self._next_turn()
 
 	def recruitment_center(self):
@@ -132,7 +132,7 @@ class ThumperGame:
 	def troop_transports(self, troops_deployed):
 		self._check_game_ended()
 		self._check_garrison()
-		self._check_troops(TROOP_TRANSPORTS_TROOPS_PRODUCED, troops_deployed, TROOP_TRANSPORTS_DEPLOYMENT_LIMIT)
+		self._check_troops(Constant.TROOP_TRANSPORTS_TROOPS_PRODUCED, troops_deployed, Constant.TROOP_TRANSPORTS_DEPLOYMENT_LIMIT)
 		self._perform_action(ActionType.MILITARY, Action.TROOP_TRANSPORTS)
 		self._deploy_troops(troops_deployed)
 		self._next_turn()
@@ -171,7 +171,7 @@ class ThumperGame:
 	def mobilization(self, troops_deployed):
 		self._check_game_ended()
 		self._check_garrison()
-		self._check_troops(MOBILIZATION_TROOPS_PRODUCED, troops_deployed, MOBILIZATION_DEPLOYMENT_LIMIT)
+		self._check_troops(Constant.MOBILIZATION_TROOPS_PRODUCED, troops_deployed, Constant.MOBILIZATION_DEPLOYMENT_LIMIT)
 		self._perform_action(ActionType.POLITICAL, Action.MOBILIZATION, solari=Cost.MOBILIZATION)
 		self.current_player.influence += 1
 		self._deploy_troops(troops_deployed)
@@ -209,7 +209,7 @@ class ThumperGame:
 		return player is not self.current_player and player.troops_garrison > 0
 
 	def stone_burner_enabled_no_target(self):
-		for i in range(PLAYER_COUNT):
+		for i in range(Constant.PLAYER_COUNT):
 			if i == self.current_player_index:
 				continue
 			target = i + 1
@@ -270,8 +270,8 @@ class ThumperGame:
 		if self.current_player.agents_left <= 0:
 			raise ThumperError("Performed an action even though the player had no actions left")
 		self.current_player.take_turn()
-		for i in range(PLAYER_COUNT):
-			player_index = (self.current_player_index + 1 + i) % PLAYER_COUNT
+		for i in range(Constant.PLAYER_COUNT):
+			player_index = (self.current_player_index + 1 + i) % Constant.PLAYER_COUNT
 			player = self.players[player_index]
 			if player.agents_left > 0:
 				# There is still a player who has an agent left
@@ -281,13 +281,13 @@ class ThumperGame:
 				return
 		# There are no players with any agents left, resolve the conflict
 		self._resolve_conflict()
-		if self.round < MAX_ROUNDS:
+		if self.round < Constant.MAX_ROUNDS:
 			self.round += 1
-			self.first_player_index = (self.first_player_index + 1) % PLAYER_COUNT
+			self.first_player_index = (self.first_player_index + 1) % Constant.PLAYER_COUNT
 			self.current_player_index = self.first_player_index
 			self.current_player = self.players[self.current_player_index]
 			if Action.SPICE_SILO in self.available_actions:
-				self.spice_in_silo = min(self.spice_in_silo + 1, MAX_SPICE_SILO)
+				self.spice_in_silo = min(self.spice_in_silo + 1, Constant.MAX_SPICE_SILO)
 			else:
 				self.spice_in_silo = 1
 			self._reset_available_actions()
@@ -371,16 +371,21 @@ class ThumperGame:
 			ConflictReward(0, 0, 1, 0)
 		]
 		rewards7 = [
-			ConflictReward(2, 0, 0, 0),
+			ConflictReward(1, 0, 3, 0),
 			ConflictReward(0, 0, 5, 0),
 			ConflictReward(0, 0, 3, 0)
 		]
 		rewards8 = [
+			ConflictReward(2, 0, 0, 0),
+			ConflictReward(0, 0, 5, 0),
+			ConflictReward(0, 0, 3, 0)
+		]
+		rewards9 = [
 			ConflictReward(0, 2, 3, 0),
 			ConflictReward(0, 1, 5, 0),
 			ConflictReward(0, 0, 3, 0)
 		]
-		rewards9 = [
+		rewards10 = [
 			ConflictReward(2, 0, 0, 0),
 			ConflictReward(1, 0, 0, 0),
 			ConflictReward(0, 0, 3, 0)
@@ -398,7 +403,8 @@ class ThumperGame:
 		level3 = [
 			Conflict(7, rewards7),
 			Conflict(8, rewards8),
-			Conflict(9, rewards9)
+			Conflict(9, rewards9),
+			Conflict(10, rewards10)
 		]
 		levels = [
 			level1,
@@ -409,7 +415,7 @@ class ThumperGame:
 		for level in levels:
 			random.shuffle(level)
 			self.conflicts += level
-		assert len(self.conflicts) == MAX_ROUNDS
+		assert len(self.conflicts) == Constant.MAX_ROUNDS
 
 	def _update_victory_points(self):
 		for player in self.players:
