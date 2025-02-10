@@ -111,6 +111,7 @@ class raw_env(AECEnv, EzPickle):
 			reward = player.get_reward()
 			name = self.agents[i]
 			self.rewards[name] = reward
+			self._cumulative_rewards[name] += reward
 		self.terminations = {name: self.game.game_ended for name in self.agents}
 
 	def action_masks(self):
@@ -125,20 +126,10 @@ class raw_env(AECEnv, EzPickle):
 		else:
 			return None
 
-	def get_shapes(self):
-		agent = self.agents[0]
-		state_shape = self.observation_spaces[agent]["observation"].shape
-		action_shape = self.action_spaces[agent].n
-		return state_shape, action_shape
-
-	def get_action_space(self):
-		agent = self.agents[0]
-		action_space = self.action_spaces[agent]
-		return action_space
-
 	def _reset_common(self):
 		self.agent_selection = self.agents[0]
 		self.rewards = {name: 0 for name in self.agents}
+		self._cumulative_rewards = {name: 0 for name in self.agents}
 		self.terminations = {name: False for name in self.agents}
 		self.truncations = {name: False for name in self.agents}
 		self.infos = {name: {} for name in self.agents}

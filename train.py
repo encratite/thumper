@@ -6,21 +6,29 @@ import torch
 from torch import nn
 from torch.distributions import Distribution, Independent, Normal
 from torch.optim.lr_scheduler import LambdaLR
+from gymnasium.spaces import Dict
 from tianshou.env import DummyVectorEnv
-from tianshou.data import Collector, CollectStats, ReplayBuffer, VectorReplayBuffer
+from tianshou.data import Collector, VectorReplayBuffer
+from tianshou.env.pettingzoo_env import PettingZooEnv
 from tianshou.highlevel.logger import LoggerFactoryDefault
-from tianshou.policy import PPOPolicy
+from tianshou.policy import PPOPolicy, MultiAgentPolicyManager
 from tianshou.policy.base import BasePolicy
 from tianshou.trainer import OnpolicyTrainer
 from tianshou.utils.net.common import ActorCritic, Net
-from tianshou.utils.net.continuous import ActorProb, Critic
+from tianshou.utils.net.continuous import Actor, Critic
 
 import environment
+from constants import Constant
 
 def make_envs(count):
-	env = environment.env()
-	train_envs = DummyVectorEnv([environment.env for _ in range(count)])
-	test_envs = DummyVectorEnv([environment.env for _ in range(count)])
+	def wrap_env():
+		env = environment.env()
+		wrapped = PettingZooEnv(env)
+		return wrapped
+
+	env = wrap_env()
+	train_envs = DummyVectorEnv([wrap_env for _ in range(count)])
+	test_envs = DummyVectorEnv([wrap_env for _ in range(count)])
 	return env, train_envs, test_envs
 
 def test_ppo():
@@ -59,26 +67,18 @@ def test_ppo():
 	}
 
 	env, train_envs, test_envs = make_envs(environments)
-	state_shape, action_shape = env.get_shapes()
-	net_a = Net(
-		state_shape,
-		hidden_sizes=hidden_sizes,
-		activation=nn.Tanh,
-		device=device
+	observation_space = (
+		env.observation_space["observation"]
+		if isinstance(env.observation_space, Dict)
+		else env.observation_space
 	)
-	actor = ActorProb(
-		net_a,
-		action_shape,
-		unbounded=True,
-		device=device
-	).to(device)
-	net_c = Net(
-		state_shape,
-		hidden_sizes=hidden_sizes,
-		activation=nn.Tanh,
-		device=device
-	)
-	critic = Critic(net_c, device=device).to(device)
+	state_shape = observation_space.shape or int(observation_space.n)
+	action_shape = env.action_space.shape or int(env.action_space.n)
+	net = Net(state_shape=state_shape, hidden_sizes=hidden_sizes, device=device)
+	actor: nn.Module
+	critic: nn.Module
+	actor = Actor(net, args.action_shape, device=args.device).to(args.device)
+	critic = Critic(net, device=args.device).to(args.device)
 	actor_critic = ActorCritic(actor, critic)
 	torch.nn.init.constant_(actor.sigma_param, -0.5)
 	for module in actor_critic.modules():
@@ -95,21 +95,24 @@ def test_ppo():
 		lr_scheduler = LambdaLR(optim, lr_lambda=lambda epoch: 1 - epoch / max_update_num)
 	else:
 		lr_scheduler = None
-	action_space = env.get_action_space()
 
 	def dist_fn(loc_scale: tuple[torch.Tensor, torch.Tensor]) -> Distribution:
 		loc, scale = loc_scale
 		return Independent(Normal(loc, scale), 1)
 
-	policy = PPOPolicy(
-		actor=actor,
-		critic=critic,
-		optim=optim,
-		dist_fn=dist_fn,
-		lr_scheduler=lr_scheduler,
-		action_space=action_space,
-		action_scaling=False
-	)
+	agents = []
+	for _ in range(Constant.PLAYER_COUNT):
+		agent = PPOPolicy(
+			actor=actor,
+			critic=critic,
+			optim=optim,
+			dist_fn=dist_fn,
+			lr_scheduler=lr_scheduler,
+			action_space=env.action_space,
+			action_scaling=False
+		)
+		agents.append(agent)
+	policy = MultiAgentPolicyManager(policies=agents, env=env)
 
 	buffer = VectorReplayBuffer(buffer_size, len(train_envs))
 	train_collector = Collector(policy, train_envs, buffer, exploration_noise=True)
