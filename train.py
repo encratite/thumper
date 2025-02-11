@@ -1,11 +1,8 @@
 import os
 import datetime
 import pprint
-import numpy as np
 import torch
 from torch import nn
-from torch.distributions import Distribution, Independent, Normal
-from torch.optim.lr_scheduler import LambdaLR
 from gymnasium.spaces import Dict
 from tianshou.env import DummyVectorEnv
 from tianshou.data import Collector, VectorReplayBuffer
@@ -15,7 +12,7 @@ from tianshou.policy import PPOPolicy, MultiAgentPolicyManager
 from tianshou.policy.base import BasePolicy
 from tianshou.trainer import OnpolicyTrainer
 from tianshou.utils.net.common import ActorCritic, Net
-from tianshou.utils.net.continuous import Actor, Critic
+from tianshou.utils.net.discrete import Actor, Critic
 
 import environment
 from constants import Constant
@@ -77,45 +74,30 @@ def test_ppo():
 	net = Net(state_shape=state_shape, hidden_sizes=hidden_sizes, device=device)
 	actor: nn.Module
 	critic: nn.Module
-	actor = Actor(net, args.action_shape, device=args.device).to(args.device)
-	critic = Critic(net, device=args.device).to(args.device)
+	actor = Actor(net, action_shape, device=device).to(device)
+	critic = Critic(net, device=device).to(device)
 	actor_critic = ActorCritic(actor, critic)
-	torch.nn.init.constant_(actor.sigma_param, -0.5)
 	for module in actor_critic.modules():
 		if isinstance(module, torch.nn.Linear):
-			torch.nn.init.orthogonal_(module.weight, gain=np.sqrt(2))
+			torch.nn.init.orthogonal_(module.weight)
 			torch.nn.init.zeros_(module.bias)
-	for module in actor.mu.modules():
-		if isinstance(module, torch.nn.Linear):
-			torch.nn.init.zeros_(module.bias)
-			module.weight.data.copy_(0.01 * module.weight.data)
 	optim = torch.optim.Adam(actor_critic.parameters(), lr=lr)
-	if lr_decay:
-		max_update_num = np.ceil(step_per_epoch / step_per_collect) * epochs
-		lr_scheduler = LambdaLR(optim, lr_lambda=lambda epoch: 1 - epoch / max_update_num)
-	else:
-		lr_scheduler = None
-
-	def dist_fn(loc_scale: tuple[torch.Tensor, torch.Tensor]) -> Distribution:
-		loc, scale = loc_scale
-		return Independent(Normal(loc, scale), 1)
-
 	agents = []
 	for _ in range(Constant.PLAYER_COUNT):
 		agent = PPOPolicy(
 			actor=actor,
 			critic=critic,
 			optim=optim,
-			dist_fn=dist_fn,
-			lr_scheduler=lr_scheduler,
+			dist_fn=torch.distributions.Categorical,
 			action_space=env.action_space,
-			action_scaling=False
+			action_scaling=False,
+			deterministic_eval=True
 		)
 		agents.append(agent)
 	policy = MultiAgentPolicyManager(policies=agents, env=env)
 
 	buffer = VectorReplayBuffer(buffer_size, len(train_envs))
-	train_collector = Collector(policy, train_envs, buffer, exploration_noise=True)
+	train_collector = Collector(policy, train_envs, buffer)
 	test_collector = Collector(policy, test_envs)
 
 	now = datetime.datetime.now().strftime("%y%m%d-%H%M%S")
@@ -131,11 +113,7 @@ def test_ppo():
 	)
 
 	def save_best_fn(policy: BasePolicy) -> None:
-		state = {
-			"model": policy.state_dict(),
-			"obs_rms": train_envs.get_obs_rms()
-		}
-		torch.save(state, os.path.join(log_path, "policy.pth"))
+		torch.save(policy.state_dict(), os.path.join(log_path, "policy.pth"))
 
 	trainer = OnpolicyTrainer(
 		policy=policy,
