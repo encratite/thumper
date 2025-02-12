@@ -1,8 +1,8 @@
 import random
-from constants import Constant, Action, ActionType, Cost
-from player import ThumperPlayer
-from error import ThumperError
-from conflict import Conflict, ConflictReward
+from .constants import Constant, Action, ActionType, Cost
+from .player import ThumperPlayer
+from .error import ThumperError
+from .conflict import Conflict, ConflictReward
 
 class ThumperGame:
 	PRINT_END_OF_GAME_STATS = False

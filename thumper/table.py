@@ -1,7 +1,7 @@
 from PyQt6.QtCore import (Qt, QSize, QModelIndex, QAbstractTableModel)
 from PyQt6.QtWidgets import QTableView
 from PyQt6.QtGui import QFont
-from constants import *
+from .constants import Constant
 
 class ExpandingTableView(QTableView):
 	def sizeHint(self):
@@ -62,7 +62,7 @@ class PlayerTableModel(QAbstractTableModel):
 		return len(self.rows)
 
 	def columnCount(self, index):
-		return PLAYER_COUNT + 1
+		return Constant.PLAYER_COUNT + 1
 
 	def _get_player_column(self, row, column):
 		player = self.players[column - 1]

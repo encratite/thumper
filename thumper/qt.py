@@ -1,10 +1,10 @@
 from functools import partial
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (QWidget, QGridLayout, QLabel, QPushButton, QHeaderView, QSizePolicy, QInputDialog, QMessageBox, QDialog)
-from game import ThumperGame
-from constants import Action, ActionType, Cost
-from table import ExpandingTableView, PlayerTableModel
-from radio import RadioButtonDialog
+from .game import ThumperGame
+from .constants import Action, ActionType, Cost
+from .table import ExpandingTableView, PlayerTableModel
+from .radio import RadioButtonDialog
 
 class ThumperQt(QWidget):
 	def __init__(self):

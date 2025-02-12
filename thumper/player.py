@@ -1,5 +1,5 @@
 import random
-from constants import Constant, ActionType
+from .constants import Constant, ActionType
 
 class ThumperPlayer:
 	def __init__(self):

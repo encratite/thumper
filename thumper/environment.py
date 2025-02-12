@@ -6,9 +6,9 @@ from pettingzoo.utils.env import AgentID, ObsType
 from pettingzoo import AECEnv
 from pettingzoo.utils import wrappers
 import numpy as np
-from game import ThumperGame
-from constants import Constant, Action, ActionType, Cost
-from action import EnvironmentAction
+from .game import ThumperGame
+from .constants import Constant, Action, ActionType, Cost
+from .action import EnvironmentAction
 
 def env(**kwargs):
 	environment = raw_env(**kwargs)
