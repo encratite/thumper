@@ -9,10 +9,10 @@ import numpy as np
 from .game import ThumperGame
 from .constants import Constant, Action, ActionType, Cost
 from .action import EnvironmentAction
+from .player import ThumperPlayer
 
 def env(**kwargs):
 	environment = raw_env(**kwargs)
-	environment = wrappers.TerminateIllegalWrapper(environment, illegal_reward=-1)
 	environment = wrappers.AssertOutOfBoundsWrapper(environment)
 	environment = wrappers.OrderEnforcingWrapper(environment)
 	return environment
@@ -85,7 +85,7 @@ class raw_env(AECEnv, EzPickle):
 		return self.action_spaces[agent]
 
 	def observe(self, agent: AgentID) -> ObsType | None:
-		observation = self._get_observation()
+		observation = self._get_observation(agent)
 		action_mask = [1 if action.enabled(self.game) else 0 for action in self.actions]
 		output = {
 			"observation": observation,
@@ -114,11 +114,11 @@ class raw_env(AECEnv, EzPickle):
 			self._cumulative_rewards[name] += reward
 		self.terminations = {name: self.game.game_ended for name in self.agents}
 
-	def action_masks(self):
+	def action_masks(self) -> list[bool]:
 		masks = [action.enabled(self.game) for action in self.actions]
 		return masks
 
-	def get_last_game_players(self):
+	def get_last_game_players(self) -> None:
 		if self.last_game_players is not None:
 			output = self.last_game_players
 			self.last_game_players = None
@@ -126,7 +126,7 @@ class raw_env(AECEnv, EzPickle):
 		else:
 			return None
 
-	def _reset_common(self):
+	def _reset_common(self) -> None:
 		self.agent_selection = self.agents[0]
 		self.rewards = {name: 0 for name in self.agents}
 		self._cumulative_rewards = {name: 0 for name in self.agents}
@@ -134,7 +134,7 @@ class raw_env(AECEnv, EzPickle):
 		self.truncations = {name: False for name in self.agents}
 		self.infos = {name: {} for name in self.agents}
 
-	def _initialize_actions(self):
+	def _initialize_actions(self) -> None:
 		actions = [
 			EnvironmentAction(
 				self.game.construct_palace,
@@ -308,29 +308,34 @@ class raw_env(AECEnv, EzPickle):
 		total_actions = len(self.actions)
 		self.action_spaces = {name: Discrete(total_actions) for name in self.agents}
 
-	def _get_observation(self):
+	def _get_observation(self, agent: AgentID) -> np.array:
 		# One-hot encoding of the current round
 		observation = self._get_one_hot_encoding(self.game.round)
 		# One-hot encoding of the randomized conflict rewards
 		conflict = self.game.conflicts[self.game.round - 1]
 		observation += self._get_one_hot_encoding(conflict.id)
-		# Resources, etc., of each player
-		for player in self.game.players:
-			observation += self._get_player_observation(player)
+		# Resources, etc., of each player, commencing with the agent's
+		agent_index = self.agents.index(agent)
+		players = self.game.players
+		observation += self._get_player_observation(players[agent_index])
+		for i in range(len(players)):
+			if i != agent_index:
+				player = players[i]
+				observation += self._get_player_observation(player)
 		return np.array(observation, dtype=np.int8)
 
-	def _get_one_hot_encoding(self, value):
+	def _get_one_hot_encoding(self, value: int) -> list[int]:
 		observation = []
 		for i in range(Constant.MAX_ROUNDS):
-			value = 1 if value == i + 1 else 0
-			observation.append(value)
+			binary_value = 1 if value == i + 1 else 0
+			observation.append(binary_value)
 		return observation
 
-	def _get_player_observation(self, player):
-		def adjust(x):
+	def _get_player_observation(self, player: ThumperPlayer):
+		def adjust(x: int):
 			return min(x, 10)
 
-		def adjust_influence(x):
+		def adjust_influence(x: int):
 			return max(min(x + 5, 15), 0)
 
 		swordmaster = self._from_bool(player.swordmaster)
@@ -351,10 +356,10 @@ class raw_env(AECEnv, EzPickle):
 		]
 		return observation
 
-	def _from_bool(self, value):
+	def _from_bool(self, value: bool) -> int:
 		return 1 if value else 0
 
-	def _from_action_types(self, player):
+	def _from_action_types(self, player: ThumperPlayer) -> list[int]:
 		actions = [
 			ActionType.ECONOMIC,
 			ActionType.MILITARY,
