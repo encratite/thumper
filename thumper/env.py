@@ -1,4 +1,5 @@
 import functools
+import random
 import pettingzoo.utils.env
 from gymnasium.spaces import Discrete, MultiDiscrete, Box, Space, Dict
 from gymnasium.utils import EzPickle
@@ -11,11 +12,15 @@ from .constants import Constant, Action, ActionType, Cost
 from .action import EnvironmentAction
 from .player import ThumperPlayer
 
+def wrap_env(env):
+	env = wrappers.AssertOutOfBoundsWrapper(env)
+	env = wrappers.OrderEnforcingWrapper(env)
+	return env
+
 def env(**kwargs):
-	environment = raw_env(**kwargs)
-	environment = wrappers.AssertOutOfBoundsWrapper(environment)
-	environment = wrappers.OrderEnforcingWrapper(environment)
-	return environment
+	env = raw_env(**kwargs)
+	env = wrap_env(env)
+	return env
 
 class raw_env(AECEnv, EzPickle):
 	metadata = {
@@ -118,7 +123,7 @@ class raw_env(AECEnv, EzPickle):
 		masks = [action.enabled(self.game) for action in self.actions]
 		return masks
 
-	def get_last_game_players(self) -> None:
+	def get_last_game_players(self) -> list[ThumperPlayer] | None:
 		if self.last_game_players is not None:
 			output = self.last_game_players
 			self.last_game_players = None
@@ -127,7 +132,7 @@ class raw_env(AECEnv, EzPickle):
 			return None
 
 	def _reset_common(self) -> None:
-		self.agent_selection = self.agents[0]
+		self.agent_selection = random.choice(self.agents)
 		self.rewards = {name: 0 for name in self.agents}
 		self._cumulative_rewards = {name: 0 for name in self.agents}
 		self.terminations = {name: False for name in self.agents}
