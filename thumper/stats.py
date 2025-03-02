@@ -20,6 +20,7 @@ class ThumperStats:
 	_spice_harvested: int
 	_solari_earned: int
 	_games_played: int
+	_wins: int
 	_action_counts: dict[Action | None, int]
 	_action_count: int
 	_action_plot_frequency: int
@@ -35,6 +36,7 @@ class ThumperStats:
 		self._spice_harvested = 0
 		self._solari_earned = 0
 		self._games_played = 0
+		self._wins = 0
 		self._action_counts = {}
 		for action in Action:
 			self._action_counts[action] = 0
@@ -48,11 +50,11 @@ class ThumperStats:
 		last_game_players = env.get_last_game_players()
 		if last_game_players is not None:
 			player = last_game_players[index]
-			self._on_game_end(player)
+			self._on_game_end(player, last_game_players)
 			if self._games_played % self._action_plot_frequency == 0:
 				self._render_action_plot()
 
-	def _on_game_end(self, player: ThumperPlayer) -> None:
+	def _on_game_end(self, player: ThumperPlayer, last_game_players: list[ThumperPlayer]) -> None:
 		self._victory_points += player.victory_points
 		if player.swordmaster:
 			self._swordmaster_count += 1
@@ -66,6 +68,9 @@ class ThumperStats:
 		self._spice_harvested += player.spice_harvested
 		self._solari_earned += player.solari_earned
 		self._games_played += 1
+		if player is last_game_players[0]:
+			self._wins += 1
+		win_ratio_percentage = self._get_percentage(self._wins, self._games_played)
 		average_victory_points = self._victory_points / self._games_played
 		average_victory_points_swordmaster = self._get_ratio(self._victory_points_swordmaster, self._swordmaster_count)
 		average_victory_points_no_swordmaster = self._get_ratio(self._victory_points_no_swordmaster, self._games_played - self._swordmaster_count)
@@ -74,6 +79,7 @@ class ThumperStats:
 		holtzman_shield_percentage = self._get_percentage(self._holtzman_shield_count, self._games_played)
 		spice_harvested = self._get_ratio(self._spice_harvested, self._games_played)
 		solari_earned = self._get_ratio(self._solari_earned, self._games_played)
+		self._record("win_ratio", win_ratio_percentage)
 		self._record("victory_points", average_victory_points)
 		self._record("victory_points_swordmaster", average_victory_points_swordmaster)
 		self._record("victory_points_no_swordmaster", average_victory_points_no_swordmaster)

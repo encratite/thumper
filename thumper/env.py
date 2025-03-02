@@ -30,12 +30,20 @@ class raw_env(AECEnv, EzPickle):
 		"render_fps": 1,
 	}
 
-	def __init__(self, render_mode: str | None = None, screen_height: int | None = 800):
+	RANK_REWARDS = [4, 2, 1, 0]
+
+	game: ThumperGame
+	last_game_players: list[ThumperPlayer] | None
+	last_action: ActionType | None
+	_end_of_game_rewards: bool
+
+	def __init__(self, end_of_game_rewards: bool = False, render_mode: str | None = None, screen_height: int | None = 800):
 		EzPickle.__init__(self, render_mode, screen_height)
 		super().__init__()
 		self.game = ThumperGame()
 		self.last_game_players = None
 		self.last_action = None
+		self._end_of_game_rewards = end_of_game_rewards
 		self.agents: list[AgentID] = [f"player_{str(i)}" for i in range(Constant.PLAYER_COUNT)]
 		self.possible_agents = self.agents[:]
 		self._reset_common()
@@ -100,7 +108,7 @@ class raw_env(AECEnv, EzPickle):
 
 	def reset(self, seed: int | None = None, options: dict | None = None) -> None:
 		self._reset_common()
-		self.last_game_players = self.game.players
+		self.last_game_players = self.game.get_ranked_players()
 		self.game.reset()
 
 	def step(self, action: pettingzoo.utils.env.ActionType) -> None:
@@ -111,9 +119,20 @@ class raw_env(AECEnv, EzPickle):
 		self.agent_selection = self.agents[self.game.current_player_index]
 		self.last_action = environment_action.action_enum
 		self.rewards = {}
+		if self.game.game_ended:
+			ranked_players = self.game.get_ranked_players()
+		else:
+			ranked_players = None
 		for i in range(Constant.PLAYER_COUNT):
 			player = self.game.players[i]
-			reward = player.get_reward()
+			if self._end_of_game_rewards:
+				if self.game.game_ended:
+					rank = ranked_players.index(player)
+					reward = self.RANK_REWARDS[rank]
+				else:
+					reward = 0
+			else:
+				reward = player.get_reward()
 			name = self.agents[i]
 			self.rewards[name] = reward
 			self._cumulative_rewards[name] += reward
@@ -337,10 +356,10 @@ class raw_env(AECEnv, EzPickle):
 		return observation
 
 	def _get_player_observation(self, player: ThumperPlayer):
-		def adjust(x: int):
+		def adjust(x: int) -> int:
 			return min(x, 10)
 
-		def adjust_influence(x: int):
+		def adjust_influence(x: int) -> int:
 			return max(min(x + 5, 15), 0)
 
 		swordmaster = self._from_bool(player.swordmaster)
